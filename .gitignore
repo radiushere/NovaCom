@@ -1,0 +1,67 @@
+# ==========================
+# 1. Operating System Files
+# ==========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================
+# 2. Visual Studio 2022 (Backend)
+# ==========================
+.vs/
+*.user
+*.suo
+*.ipch
+*.aps
+*.opendb
+*.db
+
+# Build Output Directories (Don't sync these!)
+x64/
+x86/
+Debug/
+Release/
+backend/x64/
+backend/Debug/
+backend/Release/
+
+# Intermediate build files
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.pch
+
+# ==========================
+# 3. C++ Compilation Artifacts
+# ==========================
+# Ignore executables (Your collaborator must compile their own!)
+*.exe
+*.out
+*.app
+*.dll
+
+# ==========================
+# 4. Node.js (Bridge & Frontend)
+# ==========================
+# The biggest folder - NEVER commit node_modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# ==========================
+# 5. React / Vite Build Output
+# ==========================
+dist/
+build/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ==========================
+# 6. Exceptions (Keep these!)
+# ==========================
+# We DO want to track the text database files so your friend has data
+!backend/data/users.txt
+!backend/data/graph.txt
