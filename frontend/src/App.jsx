@@ -1,77 +1,100 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
 import FriendList from './components/FriendList';
 import RecommendationList from './components/RecommendationList';
-import UserSearch from './components/UserSearch'; // Import the new component
+import UserSearch from './components/UserSearch';
+import CommunityExplorer from './components/CommunityExplorer';
+import CommunityChat from './components/CommunityChat';
+import { callBackend } from './api';
 
 function App() {
   const [currentUserId, setCurrentUserId] = useState(1);
+  const [activeTab, setActiveTab] = useState('home'); // 'home', 'explore', 'comm_101'
+  const [joinedCommunities, setJoinedCommunities] = useState([]);
   
-  // This state forces components to re-fetch when we add a friend
-  const [refreshKey, setRefreshKey] = useState(0); 
-
-  const refreshData = () => {
-    setRefreshKey(prev => prev + 1);
+  // Refresh Joined List
+  const fetchMyComms = async () => {
+    // Ideally, backend should have "get_my_communities", but we can filter all for now
+    // Or we rely on the Join click to update local state immediately
+    // For this demo, let's assume 'get_all' and we filter in frontend or just show all for nav demo
+    // A proper get_my_communities <id> is better, but let's stick to what we built:
+    const all = await callBackend('get_all_communities');
+    if(Array.isArray(all)) {
+        // Since we didn't make get_my_communities, we show ALL in sidebar for this Phase demo
+        // Or you can update C++ to add "get_my_communities"
+        setJoinedCommunities(all.filter(c => c.members > 0)); // Hack for demo: show active ones
+    }
   };
 
+  useEffect(() => { fetchMyComms(); }, [activeTab]);
+
   return (
-    <div className="min-h-screen bg-void-black bg-[url('/bg.jpg')] bg-cover bg-center text-white font-montserrat p-4 md:p-8">
-      <div className="fixed inset-0 bg-void-black/80 pointer-events-none z-0"></div>
+    <div className="flex min-h-screen bg-void-black bg-[url('/bg.jpg')] bg-cover bg-center text-white font-montserrat">
+      {/* Background Overlay */}
+      <div className="fixed inset-0 bg-void-black/85 pointer-events-none z-0"></div>
 
-      <div className="relative z-10 max-w-6xl mx-auto">
+      {/* Sidebar (Fixed Left) */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        joinedCommunities={joinedCommunities}
+        onCommunityClick={(id) => setActiveTab(`comm_${id}`)}
+      />
+
+      {/* Main Content Area (Pushed Right) */}
+      <div className="relative z-10 flex-1 ml-20 md:ml-64 p-6 md:p-8 overflow-y-auto h-screen">
         
-        {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-          <div>
-            <h1 className="font-orbitron text-4xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-supernova to-cosmic-purple drop-shadow-glow">
-              NOVA COM
-            </h1>
-            <p className="text-sm text-gray-400 tracking-widest">INTERSTELLAR NETWORK</p>
-          </div>
-          
-          {/* User Switcher (For Testing) */}
-          <div className="flex items-center gap-4 bg-nebula-blue/50 p-2 rounded-full border border-white/10 backdrop-blur-sm">
-            <span className="text-sm text-gray-400 pl-3">LOGGED IN AS ID:</span>
-            <input 
-              type="number" 
-              value={currentUserId} 
-              onChange={(e) => setCurrentUserId(e.target.value)}
-              className="w-12 bg-deep-void text-cyan-supernova font-bold text-center rounded border border-white/20 focus:border-cyan-supernova outline-none"
-            />
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-supernova to-blue-600"></div>
-          </div>
-        </header>
+        {/* VIEW: DASHBOARD */}
+        {activeTab === 'home' && (
+           <div className="max-w-6xl mx-auto space-y-8 animate-fade-in">
+              <header className="flex justify-between items-center">
+                 <div>
+                    <h1 className="text-4xl font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-cyan-supernova to-cosmic-purple">DASHBOARD</h1>
+                    <p className="text-gray-400">Welcome back, Operator.</p>
+                 </div>
+                 {/* User Switcher */}
+                 <div className="flex items-center gap-2 bg-white/5 p-2 rounded-lg border border-white/10">
+                    <span className="text-xs text-gray-400">ID:</span>
+                    <input type="number" value={currentUserId} onChange={e=>setCurrentUserId(e.target.value)} className="w-10 bg-transparent text-white font-bold text-center outline-none"/>
+                 </div>
+              </header>
 
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          
-          {/* LEFT COLUMN: Search & Navigation (3 Cols) */}
-          <div className="md:col-span-3 space-y-6">
-            {/* Search Component */}
-            <UserSearch 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="md:col-span-2 space-y-6">
+                    <UserSearch currentUserId={currentUserId} />
+                    <FriendList userId={currentUserId} />
+                 </div>
+                 <div>
+                    <RecommendationList userId={currentUserId} />
+                 </div>
+              </div>
+           </div>
+        )}
+
+        {/* VIEW: EXPLORER */}
+        {activeTab === 'explore' && (
+           <div className="max-w-6xl mx-auto animate-fade-in">
+             <CommunityExplorer 
                 currentUserId={currentUserId} 
-                onFriendAdded={refreshData} 
-            />
+                onJoin={(id) => {
+                    callBackend('join_community', [currentUserId, id]);
+                    setActiveTab(`comm_${id}`);
+                }} 
+             />
+           </div>
+        )}
 
-            <div className="bg-nebula-blue/40 border border-white/10 rounded-2xl p-6 text-center backdrop-blur-sm">
-               <h3 className="font-orbitron text-xl text-white">STATUS</h3>
-               <div className="mt-2 inline-block px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold border border-green-500/30">
-                 ONLINE
-               </div>
+        {/* VIEW: SPECIFIC COMMUNITY */}
+        {activeTab.startsWith('comm_') && (
+            <div className="h-full animate-fade-in">
+               <CommunityChat 
+                  commId={activeTab.split('_')[1]} 
+                  currentUserId={currentUserId}
+                  onLeave={() => setActiveTab('explore')}
+               />
             </div>
-          </div>
+        )}
 
-          {/* MIDDLE COLUMN: Friends (5 Cols) */}
-          <div className="md:col-span-5">
-            {/* key={refreshKey} forces this component to reload when we add a friend */}
-            <FriendList key={refreshKey} userId={currentUserId} />
-          </div>
-
-          {/* RIGHT COLUMN: Recommendations (4 Cols) */}
-          <div className="md:col-span-4">
-            <RecommendationList key={refreshKey} userId={currentUserId} />
-          </div>
-          
-        </div>
       </div>
     </div>
   );

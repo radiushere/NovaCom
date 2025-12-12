@@ -1,5 +1,6 @@
 #pragma once
 #include "User.hpp"
+#include "Community.hpp" // <--- Include this
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -13,30 +14,36 @@ using namespace std;
 
 class NovaGraph {
 private:
-    // --- Data Stores ---
     unordered_map<int, User> userDB;
-    unordered_map<int, vector<int>> adjList; // The Social Graph
+    unordered_map<int, vector<int>> adjList;
+    
+    // --- NEW STORAGE ---
+    unordered_map<int, Community> communityDB;
+    int nextCommunityId = 100; // Auto-increment ID
 
-    // --- Helper Functions ---
     vector<string> split(const string& s, char delimiter);
 
 public:
-    // --- Core Lifecycle ---
-    void loadData(); // Loads users.txt and graph.txt
-    void saveData(); // Saves to data/ folder
+    void loadData();
+    void saveData();
 
-    // --- Graph Operations ---
+    // User/Graph Ops
     void addUser(int id, string name);
     void addFriendship(int u, int v);
-	
-	 // --- NEW ALGORITHMS (PHASE 2) ---
-    // BFS: Find connections at a specific depth (e.g., 2 = Friends of Friends)
-    string getConnectionsByDegreeJSON(int startNode, int targetDegree);
-    
-    // Recommendations: Suggest friends based on mutuals
-    string getRecommendationsJSON(int userId);
 
-    // --- API Responses (JSON Strings) ---
+    // --- COMMUNITY OPS ---
+    void createCommunity(string name, string desc, string tags);
+    void joinCommunity(int userId, int commId);
+    void leaveCommunity(int userId, int commId);
+    void addMessage(int commId, int senderId, string content);
+
+    // --- READ VIEWS (JSON) ---
     string getUserJSON(int id);
     string getFriendListJSON(int id);
+    string getConnectionsByDegreeJSON(int startNode, int targetDegree);
+    string getRecommendationsJSON(int userId);
+    
+    // New JSON Views
+    string getAllCommunitiesJSON(); // For Explorer
+    string getCommunityDetailsJSON(int commId, int userId); // Chat + Info
 };
