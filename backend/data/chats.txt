@@ -12,6 +12,8 @@
 100|8|Musa|07:38|0|0|koi suggest kr na
 100|6|Frank|07:40|0|0|hello
 100|7|Aqib|07:41|0|0|sybau frank
-100|7|Aqib|07:41|0|0|no one is talking to you
-100|7|Aqib|07:41|0|0|han mussiee
-100|7|Aqib|07:41|0|0|tu na 
+100|7|Aqib|07:41|1|0|no one is talking to you
+100|7|Aqib|07:41|1|0|han mussiee
+100|7|Aqib|07:41|1|0|tu na 
+100|1|Alice|16:09|0|0|musa needs medical help ??
+100|8|Musa|16:13|0|0|huh

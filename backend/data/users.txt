@@ -4,5 +4,5 @@
 4,David,0
 5,Eve,0
 6,Frank,10
-7,Aqib,25
+7,Aqib,40
 8,Musa,5
