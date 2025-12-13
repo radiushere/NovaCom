@@ -3,6 +3,6 @@
 3,Charlie,0
 4,David,0
 5,Eve,0
-6,Frank,0
-7,Aqib,15
-8,Musa,0
+6,Frank,10
+7,Aqib,25
+8,Musa,5

@@ -38,7 +38,9 @@ public:
     void addMessage(int commId, int senderId, string content);
 	
 	int getRelationDegree(int startNode, int targetNode);
-    void upvoteMessage(int commId, int msgIndex);
+	
+    void unbanUser(int commId, int adminId, int targetId);
+    void upvoteMessage(int commId, int userId, int msgIndex);
 	
     // New Mod functions
     void banUser(int commId, int adminId, int targetId);
@@ -55,5 +57,5 @@ public:
     
     // New JSON Views
     string getAllCommunitiesJSON(); // For Explorer
-    string getCommunityDetailsJSON(int commId, int userId); // Chat + Info
+    string getCommunityDetailsJSON(int commId, int userId, int offset = 0, int limit = 50);
 };

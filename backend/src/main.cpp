@@ -89,10 +89,11 @@ int main(int argc, char* argv[]) {
         cout << graph.getAllCommunitiesJSON() << endl;
     }
 	
-    else if (command == "get_community") {
-        // get_community <commId> <viewingUserId>
-        if (argc < 4) return 1;
-        cout << graph.getCommunityDetailsJSON(stoi(argv[2]), stoi(argv[3])) << endl;
+      else if (command == "get_community") {
+        // get_community <commId> <userId> [offset] [limit]
+        int offset = (argc > 4) ? stoi(argv[4]) : 0;
+        int limit = (argc > 5) ? stoi(argv[5]) : 50;
+        cout << graph.getCommunityDetailsJSON(stoi(argv[2]), stoi(argv[3]), offset, limit) << endl;
     }
 	
 	else if (command == "get_relation") {
@@ -102,9 +103,9 @@ int main(int argc, char* argv[]) {
     }
 	
     else if (command == "vote_message") {
-        if (argc < 4) return 1;
-        graph.upvoteMessage(stoi(argv[2]), stoi(argv[3]));
-        graph.saveData(); // Save the Karma
+        // vote_message <commId> <userId> <msgIndex>  <-- CHANGED ARGS
+        if (argc < 5) return 1;
+        graph.upvoteMessage(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
         cout << "{ \"status\": \"voted\" }" << endl;
     }
 	
@@ -133,6 +134,12 @@ int main(int argc, char* argv[]) {
         graph.banUser(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
         graph.saveData();
         cout << "{ \"status\": \"banned\" }" << endl;
+    }
+	
+	else if (command == "mod_unban") {
+        if (argc < 5) return 1;
+        graph.unbanUser(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
+        cout << "{ \"status\": \"unbanned\" }" << endl;
     }
 	
     else if (command == "mod_delete") {
