@@ -39,14 +39,14 @@ public:
     void leaveCommunity(int userId, int commId);
     void addMessage(int commId, int senderId, string content);
 
-    // MODERATION & ADMIN
+    // MODERATION & ADMIN (NEW FUNCTIONS HERE)
     void banUser(int commId, int actorId, int targetId);
     void unbanUser(int commId, int actorId, int targetId);
     void deleteMessage(int commId, int actorId, int msgIndex);
     void pinMessage(int commId, int actorId, int msgIndex);
     void upvoteMessage(int commId, int userId, int msgIndex);
     
-    // NEW HIERARCHY FUNCTIONS
+    // HIERARCHY
     void promoteToAdmin(int commId, int actorId, int targetId);
     void demoteAdmin(int commId, int actorId, int targetId);
     void transferOwnership(int commId, int actorId, int targetId);
@@ -62,7 +62,7 @@ public:
     string getRecommendationsJSON(int userId);
     string getConnectionsByDegreeJSON(int startNode, int targetDegree);
     
-    // Updated to include banned users list for Mods
+    // MEMBER LIST (Updated to show admins/bans)
     string getCommunityMembersJSON(int commId);
     
     int getRelationDegree(int startNode, int targetNode);

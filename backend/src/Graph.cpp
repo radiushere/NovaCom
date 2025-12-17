@@ -30,6 +30,16 @@ vector<string> NovaGraph::split(const string& s, char delimiter) {
     return tokens;
 }
 
+string jsonEscape(const string& s) {
+    string output;
+    for (char c : s) {
+        if (c == '"') output += "\\\"";
+        else if (c == '\\') output += "\\\\";
+        else output += c;
+    }
+    return output;
+}
+
 string sanitize(string input) {
     replace(input.begin(), input.end(), '\n', ' ');
     replace(input.begin(), input.end(), '|', ' ');
@@ -87,7 +97,7 @@ void NovaGraph::loadData() {
     }
 
     // 3. Load Communities
-    // Format: ID|Name|Desc|CoverURL|Tags|Members|Mods|Bans|Admins
+    // Format: ID|Name|Desc|Cover|Tags|Members|Mods|Bans|Admins
     ifstream commFile("data/communities.txt");
     if (commFile.is_open()) {
         while (getline(commFile, line)) {
@@ -114,7 +124,7 @@ void NovaGraph::loadData() {
                     auto banList = split(parts[7], ',');
                     for(auto b : banList) { int bid = safeStoi(b); if(bid!=0) c.bannedUsers.insert(bid); }
                 }
-                // Load Admins (Index 8)
+                // LOAD ADMINS (New)
                 if (parts.size() > 8 && parts[8] != "NULL") {
                     auto adminList = split(parts[8], ',');
                     for(auto a : adminList) { int aid = safeStoi(a); if(aid!=0) c.admins.insert(aid); }
@@ -279,7 +289,7 @@ void NovaGraph::leaveCommunity(int userId, int commId) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
         c.members.erase(userId);
-        if (c.admins.count(userId)) c.admins.erase(userId); // Remove Admin status on leave
+        if (c.admins.count(userId)) c.admins.erase(userId);
         if (c.moderators.count(userId)) {
             c.moderators.erase(userId);
             if (c.moderators.empty() && !c.members.empty()) c.moderators.insert(*c.members.begin());
@@ -302,10 +312,12 @@ void NovaGraph::addMessage(int commId, int senderId, string content) {
 // MODERATION & ADMIN
 // ==========================================
 
+// THE MISSING FUNCTIONS:
+
 void NovaGraph::promoteToAdmin(int commId, int actorId, int targetId) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
-        // Only Moderator (Owner) can promote
+        // Only Moderator can promote to admin
         if (c.moderators.count(actorId)) {
             c.admins.insert(targetId);
             saveData();
@@ -316,7 +328,7 @@ void NovaGraph::promoteToAdmin(int commId, int actorId, int targetId) {
 void NovaGraph::demoteAdmin(int commId, int actorId, int targetId) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
-        // Only Moderator (Owner) can demote
+        // Only Moderator can demote
         if (c.moderators.count(actorId)) {
             c.admins.erase(targetId);
             saveData();
@@ -327,12 +339,13 @@ void NovaGraph::demoteAdmin(int commId, int actorId, int targetId) {
 void NovaGraph::transferOwnership(int commId, int actorId, int targetId) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
-        // Only Moderator (Owner) can transfer
+        // Only Moderator can transfer
         if (c.moderators.count(actorId)) {
             c.moderators.erase(actorId);
             c.moderators.insert(targetId);
-            // Ensure new owner is not in admin list (upgrade them)
+            // Ensure new mod isn't in admin list
             c.admins.erase(targetId);
+            // Old mod becomes regular member (or admin if we wanted, but let's say regular)
             saveData();
         }
     }
@@ -344,69 +357,56 @@ void NovaGraph::banUser(int commId, int actorId, int targetId) {
         bool isMod = c.moderators.count(actorId);
         bool isAdmin = c.admins.count(actorId);
         
-        // Safety: Cannot ban Moderator
-        if (c.moderators.count(targetId)) return; 
+        // Cannot ban moderator
+        if (c.moderators.count(targetId)) return;
 
         if (isMod) {
-            // Mod can ban anyone (except other Mods, handled above)
-            c.members.erase(targetId);
-            c.admins.erase(targetId); // Remove admin status if they had it
-            c.bannedUsers.insert(targetId);
+            c.members.erase(targetId); c.admins.erase(targetId); c.bannedUsers.insert(targetId);
             saveData();
         } else if (isAdmin) {
-            // Admin can ban members, but NOT other Admins
+            // Admin cannot ban other admins
             if (!c.admins.count(targetId)) {
-                c.members.erase(targetId);
-                c.bannedUsers.insert(targetId);
+                c.members.erase(targetId); c.bannedUsers.insert(targetId);
                 saveData();
             }
         }
     }
 }
 
-void NovaGraph::unbanUser(int commId, int actorId, int targetId) {
+void NovaGraph::unbanUser(int commId, int adminId, int targetId) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
-        bool isMod = c.moderators.count(actorId);
-        bool isAdmin = c.admins.count(actorId);
-
-        if (isMod || isAdmin) {
-            c.bannedUsers.erase(targetId);
-            saveData(); 
-        }
+        bool isMod = c.moderators.count(adminId);
+        bool isAdmin = c.admins.count(adminId);
+        if (isMod || isAdmin) { c.bannedUsers.erase(targetId); saveData(); }
     }
 }
 
-void NovaGraph::deleteMessage(int commId, int actorId, int msgIndex) {
+void NovaGraph::deleteMessage(int commId, int adminId, int msgIndex) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
-        bool isMod = c.moderators.count(actorId);
-        bool isAdmin = c.admins.count(actorId);
-
+        bool isMod = c.moderators.count(adminId);
+        bool isAdmin = c.admins.count(adminId);
         if ((isMod || isAdmin) && msgIndex >= 0 && msgIndex < c.chatHistory.size()) {
-            c.chatHistory.erase(c.chatHistory.begin() + msgIndex);
-            saveData();
+            c.chatHistory.erase(c.chatHistory.begin() + msgIndex); saveData();
         }
     }
 }
 
-void NovaGraph::pinMessage(int commId, int actorId, int msgIndex) {
+void NovaGraph::pinMessage(int commId, int adminId, int msgIndex) {
     if (communityDB.find(commId) != communityDB.end()) {
         Community& c = communityDB[commId];
-        bool isMod = c.moderators.count(actorId);
-        bool isAdmin = c.admins.count(actorId);
-
-        if (isMod || isAdmin) {
-            if (msgIndex >= 0 && msgIndex < c.chatHistory.size()) {
-                Message& targetMsg = c.chatHistory[msgIndex];
-                if (!targetMsg.isPinned) {
-                    int pinCount = 0; int firstPinIndex = -1;
-                    for(int i=0; i<c.chatHistory.size(); i++) { if (c.chatHistory[i].isPinned) { pinCount++; if (firstPinIndex == -1) firstPinIndex = i; } }
-                    if (pinCount >= 2 && firstPinIndex != -1) c.chatHistory[firstPinIndex].isPinned = false;
-                    targetMsg.isPinned = true;
-                } else { targetMsg.isPinned = false; }
-                saveData();
-            }
+        bool isMod = c.moderators.count(adminId);
+        bool isAdmin = c.admins.count(adminId);
+        if ((isMod || isAdmin) && msgIndex >= 0 && msgIndex < c.chatHistory.size()) {
+            Message& targetMsg = c.chatHistory[msgIndex];
+            if (!targetMsg.isPinned) {
+                int pinCount = 0; int firstPinIndex = -1;
+                for(int i=0; i<c.chatHistory.size(); i++) { if (c.chatHistory[i].isPinned) { pinCount++; if (firstPinIndex == -1) firstPinIndex = i; } }
+                if (pinCount >= 2 && firstPinIndex != -1) c.chatHistory[firstPinIndex].isPinned = false;
+                targetMsg.isPinned = true;
+            } else { targetMsg.isPinned = false; }
+            saveData();
         }
     }
 }
@@ -427,26 +427,19 @@ void NovaGraph::upvoteMessage(int commId, int userId, int msgIndex) {
 // JSON RESPONSES
 // ==========================================
 
-// UPDATED: Return Banned Users too for the About Page
 string NovaGraph::getCommunityMembersJSON(int commId) {
     if (communityDB.find(commId) == communityDB.end()) return "[]";
-    
     Community& c = communityDB[commId];
     string json = "[";
     int count = 0;
-
-    // Helper lambda to add users to JSON
+    
     auto addUserToJSON = [&](int uid, bool isBanned) {
         if (userDB.find(uid) != userDB.end()) {
             User& u = userDB[uid];
             bool isMod = c.moderators.count(uid);
             bool isAdmin = c.admins.count(uid);
-            
             if (count > 0) json += ", ";
-            json += "{ \"id\": " + to_string(u.id) + 
-                    ", \"name\": \"" + u.username + "\"" +
-                    ", \"avatar\": \"" + (u.avatarUrl.empty() ? "" : u.avatarUrl) + "\"" +
-                    ", \"karma\": " + to_string(u.karma) + 
+            json += "{ \"id\": " + to_string(u.id) + ", \"name\": \"" + jsonEscape(u.username) + "\", \"avatar\": \"" + jsonEscape(u.avatarUrl) + "\", \"karma\": " + to_string(u.karma) + 
                     ", \"is_mod\": " + (isMod ? "true" : "false") + 
                     ", \"is_admin\": " + (isAdmin ? "true" : "false") + 
                     ", \"is_banned\": " + (isBanned ? "true" : "false") + " }";
@@ -454,11 +447,8 @@ string NovaGraph::getCommunityMembersJSON(int commId) {
         }
     };
 
-    // Add Active Members
-    for (int memberId : c.members) addUserToJSON(memberId, false);
-    
-    // Add Banned Users
-    for (int bannedId : c.bannedUsers) addUserToJSON(bannedId, true);
+    for (int mid : c.members) addUserToJSON(mid, false);
+    for (int bid : c.bannedUsers) addUserToJSON(bid, true);
 
     json += "]";
     return json;
@@ -468,9 +458,9 @@ string NovaGraph::getUserJSON(int id) {
     if (userDB.find(id) == userDB.end()) return "{}";
     User& u = userDB[id];
     string tagJson = "[";
-    for(size_t i=0; i<u.tags.size(); i++) tagJson += "\"" + u.tags[i] + "\"" + (i<u.tags.size()-1?",":"");
+    for(size_t i=0; i<u.tags.size(); i++) tagJson += "\"" + jsonEscape(u.tags[i]) + "\"" + (i<u.tags.size()-1?",":"");
     tagJson += "]";
-    return "{ \"id\": " + to_string(id) + ", \"name\": \"" + u.username + "\", \"email\": \"" + u.email + "\", \"avatar\": \"" + (u.avatarUrl.empty() ? "" : u.avatarUrl) + "\", \"karma\": " + to_string(u.karma) + ", \"tags\": " + tagJson + " }";
+    return "{ \"id\": " + to_string(id) + ", \"name\": \"" + jsonEscape(u.username) + "\", \"email\": \"" + jsonEscape(u.email) + "\", \"avatar\": \"" + jsonEscape(u.avatarUrl) + "\", \"karma\": " + to_string(u.karma) + ", \"tags\": " + tagJson + " }";
 }
 
 string NovaGraph::getFriendListJSON(int id) {
@@ -484,10 +474,7 @@ string NovaGraph::getFriendListJSON(int id) {
 
         for (size_t i = 0; i < validFriends.size(); ++i) {
             User& f = userDB[validFriends[i]];
-            json += "{ \"id\": " + to_string(f.id) + 
-                    ", \"name\": \"" + f.username + "\"" +
-                    ", \"avatar\": \"" + (f.avatarUrl.empty() ? "" : f.avatarUrl) + "\"" +
-                    ", \"karma\": " + to_string(f.karma) + " }";
+            json += "{ \"id\": " + to_string(f.id) + ", \"name\": \"" + jsonEscape(f.username) + "\", \"avatar\": \"" + jsonEscape(f.avatarUrl) + "\", \"karma\": " + to_string(f.karma) + " }";
             if (i < validFriends.size() - 1) json += ", ";
         }
     }
@@ -500,8 +487,8 @@ string NovaGraph::getAllCommunitiesJSON() {
     int count = 0;
     for (auto const& [id, c] : communityDB) {
         if (count > 0) json += ", ";
-        json += "{ \"id\": " + to_string(c.id) + ", \"name\": \"" + c.name + "\", \"desc\": \"" + c.description + "\", \"cover\": \"" + (c.coverUrl.empty() ? "" : c.coverUrl) + "\", \"members\": " + to_string(c.members.size()) + ", \"tags\": [";
-        for(size_t i=0; i<c.tags.size(); i++) json += "\"" + c.tags[i] + "\"" + (i < c.tags.size()-1 ? "," : "");
+        json += "{ \"id\": " + to_string(c.id) + ", \"name\": \"" + jsonEscape(c.name) + "\", \"desc\": \"" + jsonEscape(c.description) + "\", \"cover\": \"" + jsonEscape(c.coverUrl) + "\", \"members\": " + to_string(c.members.size()) + ", \"tags\": [";
+        for(size_t i=0; i<c.tags.size(); i++) json += "\"" + jsonEscape(c.tags[i]) + "\"" + (i < c.tags.size()-1 ? "," : "");
         json += "] }";
         count++;
     }
@@ -514,15 +501,9 @@ string NovaGraph::getCommunityDetailsJSON(int commId, int userId, int offset, in
     Community& c = communityDB[commId];
     bool isMember = c.members.count(userId);
     bool isMod = c.moderators.count(userId);
-    bool isAdmin = c.admins.count(userId); // Check if viewing user is admin
+    bool isAdmin = c.admins.count(userId);
 
-    string json = "{ \"id\": " + to_string(c.id) + 
-                  ", \"name\": \"" + c.name + "\"" +
-                  ", \"desc\": \"" + c.description + "\"" +
-                  ", \"is_member\": " + (isMember ? "true" : "false") + 
-                  ", \"is_mod\": " + (isMod ? "true" : "false") + 
-                  ", \"is_admin\": " + (isAdmin ? "true" : "false") + 
-                  ", \"total_msgs\": " + to_string(c.chatHistory.size()) + ", \"messages\": [";
+    string json = "{ \"id\": " + to_string(c.id) + ", \"name\": \"" + jsonEscape(c.name) + "\", \"desc\": \"" + jsonEscape(c.description) + "\", \"is_member\": " + (isMember ? "true" : "false") + ", \"is_mod\": " + (isMod ? "true" : "false") + ", \"is_admin\": " + (isAdmin ? "true" : "false") + ", \"total_msgs\": " + to_string(c.chatHistory.size()) + ", \"messages\": [";
     
     int total = c.chatHistory.size();
     int end = total - offset; 
@@ -536,10 +517,10 @@ string NovaGraph::getCommunityDetailsJSON(int commId, int userId, int offset, in
         if(userDB.find(m.senderId) != userDB.end()) avatar = userDB[m.senderId].avatarUrl;
 
         json += "{ \"index\": " + to_string(i) + 
-                ", \"sender\": \"" + m.senderName + "\"" +
+                ", \"sender\": \"" + jsonEscape(m.senderName) + "\"" +
                 ", \"senderId\": " + to_string(m.senderId) + 
-                ", \"senderAvatar\": \"" + (avatar.empty() ? "" : avatar) + "\"" + 
-                ", \"content\": \"" + m.content + "\"" +
+                ", \"senderAvatar\": \"" + jsonEscape(avatar) + "\"" + 
+                ", \"content\": \"" + jsonEscape(m.content) + "\"" +
                 ", \"time\": \"" + m.timestamp + "\"" +
                 ", \"votes\": " + to_string(m.upvoters.size()) + 
                 ", \"has_voted\": " + (hasVoted ? "true" : "false") + 
@@ -563,7 +544,7 @@ string NovaGraph::getConnectionsByDegreeJSON(int startNode, int targetDegree) {
     string json = "[";
     for (size_t i = 0; i < resultIDs.size(); ++i) {
         User& u = userDB[resultIDs[i]];
-        json += "{ \"id\": " + to_string(u.id) + ", \"name\": \"" + u.username + "\", \"degree\": " + to_string(targetDegree) + " }";
+        json += "{ \"id\": " + to_string(u.id) + ", \"name\": \"" + jsonEscape(u.username) + "\", \"degree\": " + to_string(targetDegree) + " }";
         if (i < resultIDs.size() - 1) json += ", ";
     }
     json += "]";
@@ -582,7 +563,7 @@ string NovaGraph::getRecommendationsJSON(int userId) {
     string json = "[";
     for (size_t i = 0; i < candidates.size(); ++i) {
         int id = candidates[i].first; string name = userDB[id].username;
-        json += "{ \"id\": " + to_string(id) + ", \"name\": \"" + name + "\", \"mutual_friends\": " + to_string(candidates[i].second) + " }";
+        json += "{ \"id\": " + to_string(id) + ", \"name\": \"" + jsonEscape(name) + "\", \"mutual_friends\": " + to_string(candidates[i].second) + " }";
         if (i < candidates.size() - 1) json += ", ";
     }
     json += "]";
@@ -595,7 +576,7 @@ string NovaGraph::getGraphVisualJSON() {
     for (auto const& [id, user] : userDB) {
         if (count > 0) json += ", ";
         int friendCount = adjList[id].size();
-        json += "{ \"id\": " + to_string(id) + ", \"name\": \"" + user.username + "\", \"val\": " + to_string(friendCount + 1) + " }";
+        json += "{ \"id\": " + to_string(id) + ", \"name\": \"" + jsonEscape(user.username) + "\", \"val\": " + to_string(friendCount + 1) + " }";
         count++;
     }
     json += "], \"links\": [";
@@ -637,7 +618,7 @@ string NovaGraph::searchUsersJSON(string query, string tagFilter) {
         if (!tagMatch) for (const string& t : u.tags) if (t == tagFilter) { tagMatch = true; break; }
         if (nameMatch && tagMatch) {
             if (count > 0) json += ", ";
-            json += "{ \"id\": " + to_string(u.id) + ", \"name\": \"" + u.username + "\", \"avatar\": \"" + (u.avatarUrl.empty() ? "" : u.avatarUrl) + "\", \"karma\": " + to_string(u.karma) + " }";
+            json += "{ \"id\": " + to_string(u.id) + ", \"name\": \"" + jsonEscape(u.username) + "\", \"avatar\": \"" + jsonEscape(u.avatarUrl) + "\", \"karma\": " + to_string(u.karma) + " }";
             count++;
         }
     }
@@ -653,7 +634,7 @@ string NovaGraph::getPopularCommunitiesJSON() {
     for(size_t i=0; i<comms.size() && i<5; i++) {
         Community& c = comms[i];
         if (i > 0) json += ", ";
-        json += "{ \"id\": " + to_string(c.id) + ", \"name\": \"" + c.name + "\", \"members\": " + to_string(c.members.size()) + ", \"cover\": \"" + (c.coverUrl.empty() ? "" : c.coverUrl) + "\" }";
+        json += "{ \"id\": " + to_string(c.id) + ", \"name\": \"" + jsonEscape(c.name) + "\", \"members\": " + to_string(c.members.size()) + ", \"cover\": \"" + jsonEscape(c.coverUrl) + "\" }";
     }
     json += "]";
     return json;

@@ -24,7 +24,7 @@ struct Community {
     set<int> members;
     vector<Message> chatHistory;
     
-    set<int> moderators; // The "Owner" (Top level)
-    set<int> admins;     // NEW: The "Admins" (Mid level)
-    set<int> bannedUsers;
+    set<int> moderators; // The Owners
+    set<int> bannedUsers; // The Banned
+    set<int> admins;     // NEW: The Admins
 };

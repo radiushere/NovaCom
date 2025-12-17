@@ -4,8 +4,6 @@
 
 using namespace std;
 
-// USAGE: backend.exe <command> <args...>
-
 int main(int argc, char* argv[]) {
     NovaGraph graph;
     graph.loadData();
@@ -70,7 +68,7 @@ int main(int argc, char* argv[]) {
         int limit = (argc > 5) ? stoi(argv[5]) : 50;
         cout << graph.getCommunityDetailsJSON(stoi(argv[2]), stoi(argv[3]), offset, limit) << endl;
     }
-    else if (command == "get_community_members") { // New for About Page
+    else if (command == "get_community_members") { 
         if (argc < 3) return 1;
         cout << graph.getCommunityMembersJSON(stoi(argv[2])) << endl;
     }
@@ -88,6 +86,10 @@ int main(int argc, char* argv[]) {
     }
     else if (command == "get_popular") {
         cout << graph.getPopularCommunitiesJSON() << endl;
+    }
+    else if (command == "get_visual_graph") {
+        // THIS IS THE CRITICAL COMMAND FOR THE MAP
+        cout << graph.getGraphVisualJSON() << endl;
     }
     else if (command == "vote_message") {
         if (argc < 5) return 1;
@@ -114,7 +116,6 @@ int main(int argc, char* argv[]) {
         graph.pinMessage(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
         cout << "{ \"status\": \"pinned\" }" << endl;
     }
-    // NEW HIERARCHY COMMANDS
     else if (command == "mod_promote_admin") {
         if (argc < 5) return 1;
         graph.promoteToAdmin(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
@@ -131,7 +132,7 @@ int main(int argc, char* argv[]) {
         cout << "{ \"status\": \"transferred\" }" << endl;
     }
     else {
-        cout << "{ \"error\": \"Unknown command\" }" << endl;
+        cout << "{ \"error\": \"Unknown command: " << command << "\" }" << endl;
     }
 
     return 0;

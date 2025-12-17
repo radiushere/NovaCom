@@ -6,26 +6,39 @@ import GlassCard from './GlassCard';
 const NetworkMap = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [dimensions, setDimensions] = useState({ w: 800, h: 600 });
+  const [error, setError] = useState(null);
   const containerRef = useRef(null);
   const fgRef = useRef();
 
-  // 1. Fetch Data
-  useEffect(() => {
+  const fetchGraph = () => {
+    setError("Loading...");
     callBackend('get_visual_graph').then(data => {
-      if (data && data.nodes) {
+      console.log("Graph API Response:", data); // Check Console F12 if issues persist
+      
+      if (data && data.error) {
+          setError(`Backend Error: ${data.error}`);
+      } else if (data && data.nodes && data.nodes.length > 0) {
         setGraphData(data);
+        setError(null);
+      } else {
+        setError("Map Unavailable: No signals found. Try adding friends.");
       }
+    }).catch(err => {
+        console.error("Graph Network Error:", err);
+        setError("Failed to connect to Neural Network.");
     });
+  };
+
+  useEffect(() => {
+    fetchGraph();
   }, []);
 
-  // 2. Handle Resizing
   useEffect(() => {
     const resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0) return;
       const { width, height } = entries[0].contentRect;
       setDimensions({ w: width, h: height });
     });
-
     if (containerRef.current) resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
   }, []);
@@ -37,10 +50,16 @@ const NetworkMap = () => {
         <p className="text-gray-400 text-xs">Real-time Network Topology</p>
       </div>
 
-      <div ref={containerRef} className="flex-1 bg-void-black w-full h-full">
+      <div className="absolute top-4 right-4 z-10">
+          <button onClick={fetchGraph} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1 rounded border border-white/10 pointer-events-auto">
+              Refresh Map
+          </button>
+      </div>
+
+      <div ref={containerRef} className="flex-1 bg-void-black w-full h-full relative">
         {graphData.nodes.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
-                <p>No constellation data found. Add friends to generate map.</p>
+            <div className="flex items-center justify-center h-full text-gray-500 flex-col">
+                <p>{error || "Loading..."}</p>
             </div>
         ) : (
             <ForceGraph2D
@@ -48,25 +67,16 @@ const NetworkMap = () => {
                 width={dimensions.w}
                 height={dimensions.h}
                 graphData={graphData}
-                
-                // Colors
                 backgroundColor="#0B0B15" 
                 nodeColor={() => "#00F0FF"} 
                 linkColor={() => "#6C63FF"} 
-                
-                // Labels
                 nodeLabel="name"
-                
-                // Physics
                 nodeRelSize={4}
                 linkWidth={1.5}
                 linkDirectionalParticles={2}
                 linkDirectionalParticleSpeed={0.005}
-                
-                // Forces (Prevent clumping)
                 d3VelocityDecay={0.1}
                 d3AlphaDecay={0.02}
-                
                 onNodeClick={node => {
                     fgRef.current.centerAt(node.x, node.y, 1000);
                     fgRef.current.zoom(6, 2000);
