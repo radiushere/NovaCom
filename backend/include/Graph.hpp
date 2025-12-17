@@ -57,6 +57,7 @@ public:
     void sendDirectMessage(int senderId, int receiverId, string content, int replyToId = -1);
     void reactToDirectMessage(int senderId, int receiverId, int msgId, string reaction);
 
+	void deleteUser(int id);
 
     // VIEWS
     string getUserJSON(int id);

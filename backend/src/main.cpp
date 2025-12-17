@@ -156,6 +156,11 @@ int main(int argc, char* argv[]) {
         if (argc < 3) return 1;
         cout << graph.getActiveDMsJSON(stoi(argv[2])) << endl;
     }
+	 else if (command == "delete_user") {
+        if (argc < 3) return 1;
+        graph.deleteUser(stoi(argv[2]));
+        cout << "{ \"status\": \"deleted\" }" << endl;
+    }
     else {
         cout << "{ \"error\": \"Unknown command: " << command << "\" }" << endl;
     }

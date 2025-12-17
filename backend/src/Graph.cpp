@@ -360,6 +360,38 @@ void NovaGraph::addMessage(int commId, int senderId, string content) {
     }
 }
 
+void NovaGraph::deleteUser(int id) {
+    if (userDB.find(id) == userDB.end()) return;
+
+    // 1. Free up the Username
+    string username = userDB[id].username;
+    usernameIndex.erase(username);
+
+    // 2. Remove from User Database
+    userDB.erase(id);
+
+    // 3. Remove from Social Graph (Friendships)
+    // Remove my own list
+    adjList.erase(id);
+    // Remove me from everyone else's list
+    for (auto& [otherId, friends] : adjList) {
+        auto it = remove(friends.begin(), friends.end(), id);
+        if (it != friends.end()) friends.erase(it, friends.end());
+    }
+
+    // 4. Remove from Communities
+    for (auto& [commId, c] : communityDB) {
+        c.members.erase(id);
+        c.moderators.erase(id);
+        c.admins.erase(id);
+        c.bannedUsers.erase(id);
+    }
+
+    // 5. Save Changes
+    saveData();
+}
+
+
 // ==========================================
 // MODERATION & ADMIN
 // ==========================================
