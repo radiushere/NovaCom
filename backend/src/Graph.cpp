@@ -692,6 +692,7 @@ string NovaGraph::getPopularCommunitiesJSON() {
     return json;
 }
 
+// Updated to include Metadata for Inbox UI (Unread count, Sent/Seen status)
 string NovaGraph::getActiveDMsJSON(int userId) {
     string json = "[";
     int count = 0;
@@ -713,13 +714,28 @@ string NovaGraph::getActiveDMsJSON(int userId) {
             if (userDB.find(otherId) != userDB.end()) {
                 User& other = userDB[otherId];
                 
-                // Get last message preview
                 string lastMsg = "No messages yet";
                 string time = "";
+                int unreadCount = 0;
+                int lastSenderId = -1;
+                bool isLastSeen = false;
+
                 if (!chat.messages.empty()) {
-                    lastMsg = chat.messages.back().content;
-                    time = chat.messages.back().timestamp;
+                    const auto& last = chat.messages.back();
+                    lastMsg = last.content;
+                    time = last.timestamp;
+                    lastSenderId = last.senderId;
+                    isLastSeen = last.isSeen;
+                    
+                    // Sanitize length for preview
                     if (lastMsg.length() > 30) lastMsg = lastMsg.substr(0, 30) + "...";
+
+                    // Calculate Unread Count (Messages from THEM that are NOT SEEN)
+                    for (const auto& m : chat.messages) {
+                        if (m.senderId == otherId && !m.isSeen) {
+                            unreadCount++;
+                        }
+                    }
                 }
 
                 if (count > 0) json += ", ";
@@ -727,7 +743,10 @@ string NovaGraph::getActiveDMsJSON(int userId) {
                         ", \"name\": \"" + jsonEscape(other.username) + "\"" +
                         ", \"avatar\": \"" + jsonEscape(other.avatarUrl) + "\"" +
                         ", \"last_msg\": \"" + jsonEscape(lastMsg) + "\"" +
-                        ", \"time\": \"" + time + "\" }";
+                        ", \"time\": \"" + time + "\"" +
+                        ", \"unread\": " + to_string(unreadCount) + 
+                        ", \"lastSender\": " + to_string(lastSenderId) + 
+                        ", \"lastSeen\": " + (isLastSeen ? "true" : "false") + " }";
                 count++;
             }
         }
