@@ -122,11 +122,17 @@ int main(int argc, char* argv[]) {
         cout << graph.getAllCommunitiesJSON() << endl;
     }
 	
-      else if (command == "get_community") {
+    else if (command == "get_community") {
         // get_community <commId> <userId> [offset] [limit]
         int offset = (argc > 4) ? stoi(argv[4]) : 0;
         int limit = (argc > 5) ? stoi(argv[5]) : 50;
         cout << graph.getCommunityDetailsJSON(stoi(argv[2]), stoi(argv[3]), offset, limit) << endl;
+    }
+	
+	// Add inside main:
+    else if (command == "get_community_members") {
+        if (argc < 3) return 1;
+        cout << graph.getCommunityMembersJSON(stoi(argv[2])) << endl;
     }
 	
 	else if (command == "get_relation") {
