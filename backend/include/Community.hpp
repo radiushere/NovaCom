@@ -19,10 +19,12 @@ struct Community {
     int id;
     string name;
     string description;
-    string coverUrl; // NEW: Cover Image
+    string coverUrl;
     vector<string> tags;
     set<int> members;
     vector<Message> chatHistory;
-    set<int> moderators;
+    
+    set<int> moderators; // The "Owner" (Top level)
+    set<int> admins;     // NEW: The "Admins" (Mid level)
     set<int> bannedUsers;
 };

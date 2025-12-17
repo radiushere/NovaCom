@@ -15,103 +15,110 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('home'); 
   const [joinedCommunities, setJoinedCommunities] = useState([]);
+  
+  // NEW: Stores the path to go back to (e.g., if viewing profile from About page)
+  const [returnPath, setReturnPath] = useState(null);
 
   // Fetch Joined Communities & User Data
   useEffect(() => {
     if (!currentUserId) return;
     
-    // 1. Sidebar Data (Joined Communities)
     callBackend('get_all_communities').then(all => {
        if(Array.isArray(all)) setJoinedCommunities(all);
     });
 
-    // 2. My User Data (For Avatar/Name display)
     callBackend('get_user', [currentUserId]).then(data => {
         if(data && data.id) setCurrentUser(data);
     });
   }, [currentUserId, activeTab]);
 
-  // View: Login Page (if not authenticated)
+  // Helper to handle navigation changes and clear return path if navigating normally
+  const handleNavigate = (tab) => {
+      setReturnPath(null); // Clear history on normal navigation
+      setActiveTab(tab);
+  };
+
   if (!currentUserId) {
     return <LoginPage onLogin={(id) => setCurrentUserId(id)} />;
   }
 
-  // View: Main App Layout
   return (
     <div className="flex min-h-screen bg-void-black bg-[url('/bg.jpg')] bg-cover bg-center text-white font-montserrat">
-      {/* Background Dark Overlay */}
       <div className="fixed inset-0 bg-void-black/85 pointer-events-none z-0"></div>
 
-      {/* Sidebar Navigation */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleNavigate} 
         joinedCommunities={joinedCommunities}
-        onCommunityClick={(id) => setActiveTab(`comm_${id}`)}
+        onCommunityClick={(id) => handleNavigate(`comm_${id}`)}
         currentUserId={currentUserId}
         currentUser={currentUser}
       />
 
-      {/* Main Content Area */}
       <div className="relative z-10 flex-1 ml-20 md:ml-64 p-6 md:p-8 overflow-y-auto h-screen">
         
-        {/* 1. DASHBOARD */}
         {activeTab === 'home' && (
-            <HomeDashboard userId={currentUserId} onNavigate={setActiveTab} />
+            <HomeDashboard userId={currentUserId} onNavigate={handleNavigate} />
         )}
 
-        {/* 2. FIND NEBULAS (Community Explorer) */}
         {activeTab === 'explore_comms' && (
            <div className="animate-fade-in">
              <CommunityExplorer 
                 currentUserId={currentUserId} 
                 onJoin={(id) => {
                     callBackend('join_community', [currentUserId, id]);
-                    setActiveTab(`comm_${id}`);
+                    handleNavigate(`comm_${id}`);
                 }} 
              />
            </div>
         )}
 
-        {/* 3. FRIENDS PAGE */}
         {activeTab === 'explore_users' && (
             <div className="animate-fade-in">
-                <FriendsPage currentUserId={currentUserId} onNavigate={setActiveTab} />
+                <FriendsPage currentUserId={currentUserId} onNavigate={handleNavigate} />
             </div>
         )}
 
-        {/* 4. GALAXY MAP */}
         {activeTab === 'map' && (
            <div className="h-full animate-fade-in">
              <NetworkMap />
            </div>
         )}
 
-        {/* 5. PROFILE VIEW */}
+        {/* PROFILE VIEW (With Back Button Logic) */}
         {activeTab.startsWith('profile_') && (
             <ProfileView 
                 targetId={activeTab.split('_')[1]} 
                 currentUserId={currentUserId} 
+                returnPath={returnPath} // Pass the history
+                onBack={() => {
+                    setActiveTab(returnPath);
+                    setReturnPath(null);
+                }}
             />
         )}
 
-        {/* 6. COMMUNITY CHAT */}
-        {/* Note: We check !activeTab.includes('about') to prevent Chat from showing when viewing About page */}
+        {/* COMMUNITY CHAT */}
         {activeTab.startsWith('comm_') && !activeTab.includes('about') && (
             <CommunityChat 
                commId={activeTab.split('_')[1]} 
                currentUserId={currentUserId}
-               onLeave={() => setActiveTab('explore_comms')}
-               onAbout={() => setActiveTab(`comm_about_${activeTab.split('_')[1]}`)}
+               onLeave={() => handleNavigate('explore_comms')}
+               onAbout={() => handleNavigate(`comm_about_${activeTab.split('_')[1]}`)}
             />
         )}
 
-        {/* 7. COMMUNITY ABOUT PAGE */}
+        {/* COMMUNITY ABOUT PAGE */}
         {activeTab.startsWith('comm_about_') && (
             <CommunityAbout 
-               commId={activeTab.split('_')[2]} // Extract ID after 'comm_about_'
+               commId={activeTab.split('_')[2]} 
                currentUserId={currentUserId}
-               onNavigate={setActiveTab}
+               onNavigate={handleNavigate}
+               // Special handler: When clicking a user here, remember to come back here
+               onViewUserProfile={(userId) => {
+                   setReturnPath(activeTab); // Save current "About" page as return path
+                   setActiveTab(`profile_${userId}`);
+               }}
             />
         )}
 
