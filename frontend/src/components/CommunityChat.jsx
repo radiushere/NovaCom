@@ -71,7 +71,7 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
     e.preventDefault();
     if (!msgInput.trim()) return;
     
-    // UPDATED: Include Reply ID
+    // Include Reply ID
     const replyId = replyTarget ? replyTarget.index : -1;
     await callBackend('send_message', [commId, currentUserId, replyId, msgInput]);
     
@@ -139,7 +139,7 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
               <div key={`${m.id}-${idx}`} className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}>
                  
                  {/* Message Row */}
-                 <div className={`flex max-w-[85%] gap-3 group items-end ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                 <div className={`flex max-w-[90%] gap-3 group items-end ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                     
                     {/* AVATAR */}
                     <div className="w-8 h-8 rounded-full bg-black border border-white/10 overflow-hidden flex-shrink-0">
@@ -153,10 +153,9 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
                     {/* BUBBLE WRAPPER */}
                     <div className={`relative flex flex-col ${isMe ? "items-end" : "items-start"}`}>
                         
-                        {/* SENDER NAME */}
                         {!isMe && <div className="text-[10px] text-gray-400 ml-1 mb-0.5">{m.sender}</div>}
 
-                        {/* REPLY PREVIEW (Integrated visually) */}
+                        {/* REPLY PREVIEW */}
                         {m.replyTo > -1 && (
                             <div className={`text-xs p-2 mb-1 rounded-lg border-l-2 opacity-80 ${isMe ? "bg-white/10 border-white/50 text-gray-300" : "bg-gray-800 border-gray-500 text-gray-400"}`}>
                                 <span className="opacity-60 text-[10px] uppercase block mb-0.5">Replying to:</span>
@@ -182,27 +181,38 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
                         </div>
                     </div>
 
-                    {/* HOVER TOOLS (Flex Item) */}
-                    <div className={`flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? "items-end" : "items-start"}`}>
+                    {/* HOVER TOOLS (Fixed Layout: Horizontal Row) */}
+                    <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mb-2 bg-black/40 backdrop-blur rounded-lg p-1 border border-white/5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                          
-                         {/* Reply Button */}
+                         {/* Reply */}
                          <button 
-                            onClick={() => setReplyTarget({ index: m.id, content: m.content })} // NOTE: Using ID now!
-                            className="p-1.5 text-gray-500 hover:text-cyan-supernova hover:bg-white/5 rounded-full"
+                            onClick={() => setReplyTarget({ index: m.id, content: m.content })}
+                            className="p-1.5 text-gray-400 hover:text-cyan-supernova hover:bg-white/10 rounded"
                             title="Reply"
                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
                          </button>
 
-                         <button onClick={() => handleVote(m.index)} className={`p-1.5 rounded-full ${m.has_voted ? "text-cyan-supernova" : "text-gray-500 hover:text-white"}`}>▲</button>
+                         {/* Vote */}
+                         <button 
+                            onClick={() => handleVote(m.index)} 
+                            className={`p-1.5 rounded text-xs ${m.has_voted ? "text-cyan-supernova font-bold" : "text-gray-400 hover:text-white hover:bg-white/10"}`} 
+                            title="Upvote"
+                         >
+                            ▲
+                         </button>
                          
-                         {/* MOD TOOLS */}
+                         {/* Mod / Owner Actions */}
                          {(details.is_mod || isMe) && (
-                            <div className="flex flex-col gap-1 mt-1">
-                                {details.is_mod && <button onClick={() => handlePin(m.index)} className="text-xs text-gray-500 hover:text-yellow-400">📌</button>}
-                                <button onClick={() => handleDelete(m.index)} className="text-xs text-gray-500 hover:text-red-500">🗑️</button>
-                                {details.is_mod && !isMe && <button onClick={() => handleBan(m.senderId)} className="text-[10px] text-red-500 font-bold">BAN</button>}
-                            </div>
+                            <>
+                                {details.is_mod && (
+                                    <button onClick={() => handlePin(m.index)} className={`p-1.5 text-xs rounded hover:bg-white/10 ${m.pinned ? "text-yellow-400" : "text-gray-400 hover:text-yellow-400"}`} title="Pin">📌</button>
+                                )}
+                                <button onClick={() => handleDelete(m.index)} className="p-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-white/10 rounded" title="Delete">🗑️</button>
+                                {details.is_mod && !isMe && (
+                                    <button onClick={() => handleBan(m.senderId)} className="px-1.5 py-0.5 text-[9px] text-red-500 font-bold border border-red-500/30 rounded hover:bg-red-500/10 ml-1" title="Ban">BAN</button>
+                                )}
+                            </>
                          )}
                     </div>
 
@@ -212,7 +222,7 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
         })}
       </div>
 
-      {/* REPLY CONTEXT BAR (Above Input) */}
+      {/* REPLY CONTEXT BAR */}
       {replyTarget && (
           <div className="bg-black/80 border-t border-cyan-supernova/30 p-2 px-4 flex justify-between items-center animate-slide-up backdrop-blur shrink-0">
               <div className="text-xs text-gray-300 pl-2 border-l-2 border-cyan-supernova">
