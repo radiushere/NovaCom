@@ -1,30 +1,84 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { callBackend } from '../api';
 
 const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
   const [messages, setMessages] = useState([]);
   const [msgInput, setMsgInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null); 
-  const scrollRef = useRef(null);
+  
+  // Pagination State
+  const [offset, setOffset] = useState(0);
+  const [totalMsgs, setTotalMsgs] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const MSG_LIMIT = 50;
 
-  // Poll for messages
-  const fetchMessages = async () => {
-    const data = await callBackend('get_dm', [currentUserId, friendId]);
+  // Refs for Scroll Logic
+  const scrollRef = useRef(null); 
+  const prevScrollHeight = useRef(0);
+  const isAtBottom = useRef(true);
+  const loadingHistory = useRef(false);
+
+  // 1. Fetch Latest Data
+  const fetchLatest = async () => {
+    if (loadingHistory.current) return;
+
+    const data = await callBackend('get_dm', [currentUserId, friendId, 0, MSG_LIMIT]);
     if (data && data.messages) {
-        setMessages(data.messages);
+        setTotalMsgs(data.total_msgs || data.messages.length);
+        if (offset === 0) {
+            setMessages(data.messages);
+        }
     }
   };
 
   useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 2000);
+    setOffset(0);
+    isAtBottom.current = true;
+    fetchLatest();
+    const interval = setInterval(() => {
+        if (offset === 0) fetchLatest();
+    }, 2000);
     return () => clearInterval(interval);
   }, [friendId]);
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  // 2. Scroll Restoration
+  useLayoutEffect(() => {
+    if (!scrollRef.current) return;
+    const { scrollHeight } = scrollRef.current;
+
+    if (isAtBottom.current) {
+        scrollRef.current.scrollTop = scrollHeight;
+    } else if (prevScrollHeight.current > 0) {
+        const heightDiff = scrollHeight - prevScrollHeight.current;
+        scrollRef.current.scrollTop = heightDiff;
+        prevScrollHeight.current = 0;
+    }
   }, [messages]);
+
+  // 3. Infinite Scroll
+  const handleScroll = async (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 50;
+    isAtBottom.current = atBottom;
+
+    if (scrollTop === 0 && messages.length < totalMsgs && !loading && !loadingHistory.current) {
+        setLoading(true);
+        loadingHistory.current = true;
+        prevScrollHeight.current = scrollHeight;
+
+        const newOffset = offset + MSG_LIMIT;
+        const data = await callBackend('get_dm', [currentUserId, friendId, newOffset, MSG_LIMIT]);
+        
+        if (data && data.messages.length > 0) {
+            setMessages(prev => [...data.messages, ...prev]);
+            setOffset(newOffset);
+        }
+        setLoading(false);
+        loadingHistory.current = false;
+    }
+  };
+
+  // --- ACTIONS ---
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -32,16 +86,26 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
     const replyId = replyTarget ? replyTarget.id : -1;
     await callBackend('send_dm', [currentUserId, friendId, replyId, msgInput]);
     setMsgInput("");
-    setReplyTarget(null); 
-    fetchMessages();
+    setReplyTarget(null);
+    setOffset(0);
+    isAtBottom.current = true;
+    fetchLatest();
   };
 
   const handleReaction = async (msgId) => {
     const reaction = prompt("Enter Emoji (e.g. ❤️, 😂):");
     if (reaction) {
         await callBackend('react_dm', [currentUserId, friendId, msgId, reaction]);
-        fetchMessages();
+        fetchLatest();
     }
+  };
+
+  // NEW: Delete Handler
+  const handleDelete = async (msgId) => {
+      if(window.confirm("Unsend this message?")) {
+          await callBackend('delete_dm', [currentUserId, friendId, msgId]);
+          fetchLatest();
+      }
   };
 
   return (
@@ -62,7 +126,13 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
       </div>
 
       {/* MESSAGES AREA */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-gray-700">
+      <div 
+        ref={scrollRef} 
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-gray-700"
+      >
+        {loading && <div className="text-center text-xs text-cyan-supernova animate-pulse pb-2">Retrieving Archives...</div>}
+
         {messages.map((m) => {
             const isMe = m.senderId === parseInt(currentUserId);
             return (
@@ -70,13 +140,12 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
                     key={m.id} 
                     className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}
                 >
-                    {/* Message Row Container: Aligns Bubble + Arrow side-by-side */}
-                    <div className={`flex max-w-[80%] items-end gap-3 group ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    {/* Message Row */}
+                    <div className={`flex max-w-[80%] items-end gap-2 group ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                         
-                        {/* 1. MESSAGE BUBBLE */}
+                        {/* BUBBLE */}
                         <div className="relative flex flex-col">
-                            
-                            {/* Reply Preview (Attached to top of bubble) */}
+                            {/* Reply Preview */}
                             {m.replyTo !== -1 && (
                                 <div className={`text-xs p-2 rounded-t-lg mb-0.5 border-l-2 ${isMe ? "bg-purple-900/50 border-purple-400 text-purple-200" : "bg-gray-800 border-gray-500 text-gray-400"}`}>
                                     <span className="opacity-70 text-[10px] uppercase block mb-1">Replying to:</span>
@@ -84,7 +153,7 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
                                 </div>
                             )}
 
-                            {/* Main Bubble Content */}
+                            {/* Main Content */}
                             <div 
                                 className={`px-4 py-3 text-sm shadow-lg backdrop-blur-sm cursor-pointer
                                     ${m.replyTo !== -1 ? "rounded-b-xl rounded-tr-xl" : "rounded-2xl"}
@@ -99,16 +168,14 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
                                 {m.content}
                             </div>
 
-                            {/* Metadata (Time + Seen + Reaction) */}
+                            {/* Metadata */}
                             <div className="absolute -bottom-5 w-full flex justify-between px-1">
-                                {/* Reaction Badge */}
                                 {m.reaction ? (
                                     <div className="bg-black/80 rounded-full px-1.5 py-0.5 text-xs border border-white/20 shadow -mt-2 z-10">
                                         {m.reaction}
                                     </div>
                                 ) : <span></span>}
                                 
-                                {/* Status */}
                                 <div className="text-[10px] text-gray-500 flex items-center gap-1">
                                     {m.time}
                                     {isMe && (
@@ -118,17 +185,29 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
                             </div>
                         </div>
 
-                        {/* 2. REPLY ARROW (Flex Item - No longer absolute) */}
-                        <button 
-                            onClick={() => setReplyTarget({ id: m.id, content: m.content })}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-500 hover:text-cyan-supernova hover:bg-white/5 rounded-full"
-                            title="Reply"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M9 14L4 9l5-5"/>
-                                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>
-                            </svg>
-                        </button>
+                        {/* HOVER TOOLS CONTAINER */}
+                        <div className={`flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? "items-end" : "items-start"}`}>
+                            
+                            {/* Reply Button */}
+                            <button 
+                                onClick={() => setReplyTarget({ id: m.id, content: m.content })}
+                                className="p-1.5 text-gray-500 hover:text-cyan-supernova hover:bg-white/5 rounded-full"
+                                title="Reply"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+                            </button>
+
+                            {/* Delete Button (Only for Me) */}
+                            {isMe && (
+                                <button 
+                                    onClick={() => handleDelete(m.id)}
+                                    className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-white/5 rounded-full"
+                                    title="Unsend Message"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            )}
+                        </div>
 
                     </div>
                 </div>
@@ -147,7 +226,7 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
           </div>
       )}
 
-      {/* INPUT AREA */}
+      {/* INPUT */}
       <form onSubmit={handleSend} className="p-4 border-t border-white/10 bg-void-black/90 flex gap-3 shrink-0">
         <input 
             className="flex-1 bg-deep-void px-4 py-3 rounded-xl border border-white/10 text-white focus:border-cyan-supernova focus:ring-1 focus:ring-cyan-supernova outline-none placeholder-gray-600 transition"

@@ -163,8 +163,17 @@ int main(int argc, char* argv[]) {
         cout << "{ \"status\": \"sent\" }" << endl;
     }
     else if (command == "get_dm") {
+        // get_dm <viewer> <friend> [offset] [limit]
         if (argc < 4) return 1;
-        cout << graph.getDirectChatJSON(stoi(argv[2]), stoi(argv[3])) << endl;
+        int offset = (argc > 4) ? stoi(argv[4]) : 0;
+        int limit = (argc > 5) ? stoi(argv[5]) : 50;
+        cout << graph.getDirectChatJSON(stoi(argv[2]), stoi(argv[3]), offset, limit) << endl;
+    }
+	else if (command == "delete_dm") {
+        // delete_dm <userId> <friendId> <msgId>
+        if (argc < 5) return 1;
+        graph.deleteDirectMessage(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
+        cout << "{ \"status\": \"deleted\" }" << endl;
     }
     else if (command == "react_dm") {
         if (argc < 6) return 1;

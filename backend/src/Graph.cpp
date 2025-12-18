@@ -353,31 +353,81 @@ void NovaGraph::reactToDirectMessage(int senderId, int receiverId, int msgId, st
     }
 }
 
-string NovaGraph::getDirectChatJSON(int viewerId, int friendId) {
+string NovaGraph::getDirectChatJSON(int viewerId, int friendId, int offset, int limit) {
     string key = getDMKey(viewerId, friendId);
+    
+    // 1. Mark Seen (Only for latest messages logic, technically we should only mark seen if fetching offset 0)
+    // But for simplicity, we mark seen whenever we fetch the chat.
     bool stateChanged = false;
     if (dmDB.find(key) != dmDB.end()) {
         for (auto& m : dmDB[key].messages) {
-            if (m.senderId == friendId && !m.isSeen) { m.isSeen = true; stateChanged = true; }
+            if (m.senderId == friendId && !m.isSeen) {
+                m.isSeen = true;
+                stateChanged = true;
+            }
         }
     }
     if (stateChanged) saveData();
 
-    string json = "{ \"friend_id\": " + to_string(friendId) + ", \"messages\": [";
-    if (dmDB.find(key) != dmDB.end()) {
-        const auto& msgs = dmDB[key].messages;
-        for (size_t i = 0; i < msgs.size(); ++i) {
-            const auto& m = msgs[i];
-            string replyPreview = "";
-            if (m.replyToMsgId != -1) {
-                for (const auto& orig : msgs) if (orig.id == m.replyToMsgId) { replyPreview = sanitize(orig.content.substr(0, 30)); break; }
+    // 2. Pagination Logic
+    if (dmDB.find(key) == dmDB.end()) {
+        return "{ \"friend_id\": " + to_string(friendId) + ", \"total_msgs\": 0, \"messages\": [] }";
+    }
+
+    const auto& allMsgs = dmDB[key].messages;
+    int total = allMsgs.size();
+    int end = total - offset; 
+    int start = max(0, end - limit);
+
+    string json = "{ \"friend_id\": " + to_string(friendId) + 
+                  ", \"total_msgs\": " + to_string(total) + 
+                  ", \"messages\": [";
+    
+    for (int i = start; i < end; i++) {
+        if (i < 0 || i >= total) continue;
+        const auto& m = allMsgs[i];
+        
+        string replyPreview = "";
+        if (m.replyToMsgId != -1) {
+            for (const auto& orig : allMsgs) {
+                if (orig.id == m.replyToMsgId) {
+                    replyPreview = sanitize(orig.content.substr(0, 30));
+                    break;
+                }
             }
-            json += "{ \"id\": " + to_string(m.id) + ", \"senderId\": " + to_string(m.senderId) + ", \"content\": \"" + jsonEscape(m.content) + "\", \"time\": \"" + m.timestamp + "\", \"replyTo\": " + to_string(m.replyToMsgId) + ", \"replyPreview\": \"" + jsonEscape(replyPreview) + "\", \"reaction\": \"" + jsonEscape(m.reaction) + "\", \"isSeen\": " + (m.isSeen?"true":"false") + " }";
-            if (i < msgs.size() - 1) json += ", ";
         }
+
+        json += "{ \"id\": " + to_string(m.id) + 
+                ", \"senderId\": " + to_string(m.senderId) + 
+                ", \"content\": \"" + m.content + "\"" +
+                ", \"time\": \"" + m.timestamp + "\"" +
+                ", \"replyTo\": " + to_string(m.replyToMsgId) + 
+                ", \"replyPreview\": \"" + replyPreview + "\"" +
+                ", \"reaction\": \"" + m.reaction + "\"" +
+                ", \"isSeen\": " + (m.isSeen ? "true" : "false") + " }";
+        
+        if (i < end - 1) json += ", ";
     }
     json += "] }";
     return json;
+}
+
+void NovaGraph::deleteDirectMessage(int userId, int friendId, int msgId) {
+    string key = getDMKey(userId, friendId);
+    
+    if (dmDB.find(key) != dmDB.end()) {
+        auto& msgs = dmDB[key].messages;
+        for (auto it = msgs.begin(); it != msgs.end(); ++it) {
+            if (it->id == msgId) {
+                // Security Check: Only the sender can delete their own message
+                if (it->senderId == userId) {
+                    msgs.erase(it);
+                    saveData(); // Persist changes
+                }
+                return; // Stop after finding/deleting
+            }
+        }
+    }
 }
 
 string NovaGraph::getActiveDMsJSON(int userId) {

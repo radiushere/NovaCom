@@ -66,7 +66,8 @@ public:
     // DIRECT MESSAGE
     void sendDirectMessage(int senderId, int receiverId, string content, int replyToId = -1);
     void reactToDirectMessage(int senderId, int receiverId, int msgId, string reaction);
-    string getDirectChatJSON(int viewerId, int friendId);
+	void deleteDirectMessage(int userId, int friendId, int msgId);
+    string getDirectChatJSON(int viewerId, int friendId, int offset = 0, int limit = 50);
     string getActiveDMsJSON(int userId);
 
     // VIEWS
