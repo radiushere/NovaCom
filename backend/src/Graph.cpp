@@ -24,7 +24,8 @@ string getCurrentTime() {
     return string(buffer);
 }
 
-vector<string> NovaGraph::split(const string& s, char delimiter) {
+// Global Split Function (Used by Class and Helpers)
+vector<string> globalSplit(const string& s, char delimiter) {
     vector<string> tokens;
     string token;
     istringstream tokenStream(s);
@@ -32,6 +33,11 @@ vector<string> NovaGraph::split(const string& s, char delimiter) {
         tokens.push_back(token);
     }
     return tokens;
+}
+
+string getDMKey(int u, int v) {
+    if (u < v) return to_string(u) + "_" + to_string(v);
+    return to_string(v) + "_" + to_string(u);
 }
 
 string jsonEscape(const string& s) {
@@ -50,23 +56,66 @@ string sanitize(string input) {
     return input;
 }
 
-string getDMKey(int u, int v) {
-    if (u < v) return to_string(u) + "_" + to_string(v);
-    return to_string(v) + "_" + to_string(u);
+// --- Poll Parsers (Now using globalSplit) ---
+string serializePoll(const PollData& p) {
+    string s = sanitize(p.question) + "|" + (p.allowMultiple ? "1" : "0") + "|";
+    for(size_t i=0; i<p.options.size(); i++) {
+        const auto& opt = p.options[i];
+        s += to_string(opt.id) + "~" + sanitize(opt.text) + "~";
+        if(opt.voterIds.empty()) s += "0";
+        else {
+            int c = 0;
+            for(int vid : opt.voterIds) {
+                s += to_string(vid) + (c < opt.voterIds.size()-1 ? "," : "");
+                c++;
+            }
+        }
+        if(i < p.options.size()-1) s += "^";
+    }
+    return s;
+}
+
+PollData parsePoll(string s) {
+    PollData p;
+    auto parts = globalSplit(s, '|'); 
+    if(parts.size() < 3) return p;
+
+    p.question = parts[0];
+    p.allowMultiple = (parts[1] == "1");
+    
+    auto opts = globalSplit(parts[2], '^');
+    for(auto& oStr : opts) {
+        auto fields = globalSplit(oStr, '~');
+        if(fields.size() >= 3) {
+            PollOption opt;
+            opt.id = safeStoi(fields[0]);
+            opt.text = fields[1];
+            if(fields[2] != "0") {
+                auto vList = globalSplit(fields[2], ',');
+                for(auto v : vList) opt.voterIds.insert(safeStoi(v));
+            }
+            p.options.push_back(opt);
+        }
+    }
+    return p;
 }
 
 // ==========================================
 // PERSISTENCE (Merged Logic)
 // ==========================================
 
+// Bridge function for Class to use Global Split
+vector<string> NovaGraph::split(const string& s, char delimiter) {
+    return globalSplit(s, delimiter);
+}
+
 void NovaGraph::loadData() {
     string line;
 
-    // 1. Load Users (Preserving Pending Requests)
+    // 1. Users
     ifstream userFile("data/users.txt");
     if (userFile.is_open()) {
         while (getline(userFile, line)) {
-            if (line.empty()) continue;
             auto parts = split(line, '|');
             if (parts.size() >= 7) {
                 User u;
@@ -77,30 +126,20 @@ void NovaGraph::loadData() {
                 u.avatarUrl = parts[4];
                 u.tags = split(parts[5], ',');
                 u.karma = safeStoi(parts[6]);
-                
-                // Load Pending Requests (Index 7) - Preserved
                 if (parts.size() > 7 && parts[7] != "0" && parts[7] != "") {
                     auto reqList = split(parts[7], ',');
-                    for(auto r : reqList) {
-                        int rid = safeStoi(r);
-                        if(rid != 0) u.pendingRequests.insert(rid);
-                    }
+                    for(auto r : reqList) { int rid = safeStoi(r); if(rid!=0) u.pendingRequests.insert(rid); }
                 }
-
-                if (u.id != 0) {
-                    userDB[u.id] = u;
-                    usernameIndex[u.username] = u.id;
-                }
+                if (u.id != 0) { userDB[u.id] = u; usernameIndex[u.username] = u.id; }
             }
         }
         userFile.close();
     }
 
-    // 2. Load Graph
+    // 2. Graph
     ifstream graphFile("data/graph.txt");
     if (graphFile.is_open()) {
         while (getline(graphFile, line)) {
-            if (line.empty()) continue;
             auto parts = split(line, ',');
             int id = safeStoi(parts[0]);
             vector<int> friends;
@@ -115,11 +154,10 @@ void NovaGraph::loadData() {
         graphFile.close();
     }
 
-    // 3. Load Communities (Updated with Admins)
+    // 3. Communities
     ifstream commFile("data/communities.txt");
     if (commFile.is_open()) {
         while (getline(commFile, line)) {
-            if (line.empty()) continue;
             auto parts = split(line, '|');
             if (parts.size() >= 5) { 
                 Community c;
@@ -129,92 +167,73 @@ void NovaGraph::loadData() {
                 c.coverUrl = parts[3]; 
                 auto tagList = split(parts[4], ',');
                 for(auto t : tagList) if(!t.empty()) c.tags.push_back(t);
-
-                if (parts.size() > 5 && parts[5] != "NULL") {
-                    auto list = split(parts[5], ','); for(auto x : list) { int id=safeStoi(x); if(id) c.members.insert(id); }
-                }
-                if (parts.size() > 6 && parts[6] != "NULL") {
-                    auto list = split(parts[6], ','); for(auto x : list) { int id=safeStoi(x); if(id) c.moderators.insert(id); }
-                }
-                if (parts.size() > 7 && parts[7] != "NULL") {
-                    auto list = split(parts[7], ','); for(auto x : list) { int id=safeStoi(x); if(id) c.bannedUsers.insert(id); }
-                }
-                // Load Admins (New Feature)
-                if (parts.size() > 8 && parts[8] != "NULL") {
-                    auto list = split(parts[8], ','); for(auto x : list) { int id=safeStoi(x); if(id) c.admins.insert(id); }
-                }
+                if (parts.size() > 5 && parts[5] != "NULL") { auto memList = split(parts[5], ','); for(auto m : memList) { int mid = safeStoi(m); if(mid!=0) c.members.insert(mid); } }
+                if (parts.size() > 6 && parts[6] != "NULL") { auto modList = split(parts[6], ','); for(auto m : modList) { int mid = safeStoi(m); if(mid!=0) c.moderators.insert(mid); } }
+                if (parts.size() > 7 && parts[7] != "NULL") { auto banList = split(parts[7], ','); for(auto b : banList) { int bid = safeStoi(b); if(bid!=0) c.bannedUsers.insert(bid); } }
+                if (parts.size() > 8 && parts[8] != "NULL") { auto adminList = split(parts[8], ','); for(auto a : adminList) { int aid = safeStoi(a); if(aid!=0) c.admins.insert(aid); } }
                 if (c.id != 0) { communityDB[c.id] = c; if (c.id >= nextCommunityId) nextCommunityId = c.id + 1; }
             }
         }
         commFile.close();
     }
 
-    // 4. Load Chats (UPDATED FORMAT: ReplyID and Type)
+    // 4. Chats
     ifstream chatFile("data/chats.txt");
     if (chatFile.is_open()) {
         while (getline(chatFile, line)) {
             auto parts = split(line, '|');
-            // Format: CommID|MsgID|SenderID|Name|Time|Upvotes|Pinned|ReplyTo|Type|Content
-            // We need to support old format (size 9) and NEW format (size 10 with MsgID)
-            // To auto-upgrade, we check size.
-            
-            if (parts.size() >= 9) {
+            if (parts.size() >= 10) {
                 int commId = safeStoi(parts[0]);
                 if (communityDB.find(commId) != communityDB.end()) {
                     Message m;
-                    int offset = 0;
-
-                    // CHECK FORMAT VERSION
-                    // If we have an extra field, assume index 1 is MsgID
-                    // This is a "Smart Load" to handle the transition
-                    if (parts.size() >= 10) {
-                        m.id = safeStoi(parts[1]);
-                        offset = 1; // Shift other indices by 1
-                    } else {
-                        // Legacy data: Assign a temporary ID based on load order
-                        m.id = communityDB[commId].nextMsgId++;
-                    }
-
-                    m.senderId = safeStoi(parts[1 + offset]);
-                    m.senderName = parts[2 + offset];
-                    m.timestamp = parts[3 + offset];
+                    m.id = safeStoi(parts[1]);
+                    m.senderId = safeStoi(parts[2]);
+                    m.senderName = parts[3];
+                    m.timestamp = parts[4];
                     m.upvoters.clear();
-                    if (parts[4 + offset] != "0" && parts[4 + offset] != "") {
-                         auto voterList = split(parts[4 + offset], ',');
+                    if (parts[5] != "0") {
+                         auto voterList = split(parts[5], ',');
                          for(auto v : voterList) { int vid = safeStoi(v); if(vid!=0) m.upvoters.insert(vid); }
                     }
-                    m.isPinned = (parts[5 + offset] == "1");
-                    m.replyToId = safeStoi(parts[6 + offset]);
-                    m.type = parts[7 + offset];
-                    m.content = parts[8 + offset];
-                    for (size_t i = 9 + offset; i < parts.size(); i++) m.content += " " + parts[i];
+                    m.isPinned = (parts[6] == "1");
+                    m.replyToId = safeStoi(parts[7]);
+                    m.type = parts[8];
+                    
+                    string rawContent = parts[9];
+                    for(size_t i=10; i<parts.size(); i++) rawContent += "|" + parts[i]; 
+
+                    if (m.type == "poll") {
+                        m.poll = parsePoll(rawContent);
+                        m.content = "Poll: " + m.poll.question;
+                    } else {
+                        m.content = rawContent;
+                    }
                     
                     communityDB[commId].chatHistory.push_back(m);
-                    // Update counter
                     if (m.id >= communityDB[commId].nextMsgId) communityDB[commId].nextMsgId = m.id + 1;
                 }
             }
         }
         chatFile.close();
     }
-    
-    // 5. Load DMs
+
+    // 5. DMs
     ifstream dmFile("data/dms.txt");
     if (dmFile.is_open()) {
         while (getline(dmFile, line)) {
-            if (line.empty()) continue;
             auto parts = split(line, '|');
             if (parts.size() >= 8) {
                 string key = parts[0];
                 DirectMessage m;
-                m.id = safeStoi(parts[1]); m.senderId = safeStoi(parts[2]); m.timestamp = parts[3];
+                m.id = safeStoi(parts[1]);
+                m.senderId = safeStoi(parts[2]);
+                m.timestamp = parts[3];
                 m.replyToMsgId = safeStoi(parts[4]);
                 m.reaction = (parts[5] == "NONE") ? "" : parts[5];
                 m.isSeen = (parts[6] == "1");
                 m.content = parts[7];
                 for (size_t i = 8; i < parts.size(); i++) m.content += " " + parts[i];
-                dmDB[key].chatKey = key;
-                dmDB[key].messages.push_back(m);
+                dmDB[key].chatKey = key; dmDB[key].messages.push_back(m);
                 if (m.id >= dmDB[key].nextMsgId) dmDB[key].nextMsgId = m.id + 1;
             }
         }
@@ -222,25 +241,14 @@ void NovaGraph::loadData() {
     }
 }
 
+
 void NovaGraph::saveData() {
     // 1. Save Users (Preserving Pending Requests)
-    ofstream userFile("data/users.txt");
+     ofstream userFile("data/users.txt");
     for (auto const& [id, u] : userDB) {
-        string tagStr = ""; for(size_t i=0; i<u.tags.size(); i++) tagStr += u.tags[i] + (i<u.tags.size()-1 ? "," : "");
-        if(tagStr.empty()) tagStr = "None";
-        
-        userFile << u.id << "|" << u.username << "|" << u.email << "|" << u.password << "|" 
-                 << (u.avatarUrl.empty()?"NULL":u.avatarUrl) << "|" << tagStr << "|" << u.karma << "|";
-
-        // Save Pending Requests
-        if (u.pendingRequests.empty()) userFile << "0";
-        else {
-            int i = 0;
-            for(int rid : u.pendingRequests) {
-                userFile << rid << (i < u.pendingRequests.size() - 1 ? "," : "");
-                i++;
-            }
-        }
+        string tagStr = ""; for(size_t i=0; i<u.tags.size(); i++) tagStr += u.tags[i] + (i<u.tags.size()-1 ? "," : ""); if(tagStr.empty()) tagStr = "None";
+        userFile << u.id << "|" << u.username << "|" << u.email << "|" << u.password << "|" << (u.avatarUrl.empty() ? "NULL" : u.avatarUrl) << "|" << tagStr << "|" << u.karma << "|";
+        if (u.pendingRequests.empty()) userFile << "0"; else { int i = 0; for(int rid : u.pendingRequests) { userFile << rid << (i < u.pendingRequests.size() - 1 ? "," : ""); i++; } }
         userFile << "\n";
     }
     userFile.close();
@@ -249,46 +257,53 @@ void NovaGraph::saveData() {
     ofstream graphFile("data/graph.txt");
     for (auto& [id, friends] : adjList) {
         sort(friends.begin(), friends.end()); friends.erase(unique(friends.begin(), friends.end()), friends.end());
-        graphFile << id; for (int f : friends) graphFile << "," << f; graphFile << "\n";
+        graphFile << id; for (int friendID : friends) graphFile << "," << friendID; graphFile << "\n";
     }
     graphFile.close();
 
     // 3. Save Communities (With Admins)
     ofstream commFile("data/communities.txt");
     for (auto const& [id, c] : communityDB) {
-        commFile << c.id << "|" << c.name << "|" << c.description << "|" << (c.coverUrl.empty()?"NULL":c.coverUrl) << "|";
-        for(size_t i=0; i<c.tags.size(); i++) commFile << c.tags[i] << (i<c.tags.size()-1?",":""); commFile << "|";
-        if(c.members.empty()) commFile << "NULL"; else { int i=0; for(int x:c.members) { commFile << x << (i<c.members.size()-1?",":""); i++; } } commFile << "|";
-        if(c.moderators.empty()) commFile << "NULL"; else { int i=0; for(int x:c.moderators) { commFile << x << (i<c.moderators.size()-1?",":""); i++; } } commFile << "|";
-        if(c.bannedUsers.empty()) commFile << "NULL"; else { int i=0; for(int x:c.bannedUsers) { commFile << x << (i<c.bannedUsers.size()-1?",":""); i++; } } commFile << "|";
-        if(c.admins.empty()) commFile << "NULL"; else { int i=0; for(int x:c.admins) { commFile << x << (i<c.admins.size()-1?",":""); i++; } } commFile << "\n";
+        commFile << c.id << "|" << c.name << "|" << c.description << "|" << (c.coverUrl.empty() ? "NULL" : c.coverUrl) << "|";
+        for(size_t i=0; i<c.tags.size(); i++) commFile << c.tags[i] << (i < c.tags.size()-1 ? "," : "");
+        commFile << "|";
+        if(c.members.empty()) commFile << "NULL"; else { int i=0; for(int m:c.members) { commFile << m << (i<c.members.size()-1?",":""); i++; } }
+        commFile << "|";
+        if(c.moderators.empty()) commFile << "NULL"; else { int i=0; for(int m:c.moderators) { commFile << m << (i<c.moderators.size()-1?",":""); i++; } }
+        commFile << "|";
+        if(c.bannedUsers.empty()) commFile << "NULL"; else { int i=0; for(int m:c.bannedUsers) { commFile << m << (i<c.bannedUsers.size()-1?",":""); i++; } }
+        commFile << "|";
+        if(c.admins.empty()) commFile << "NULL"; else { int i=0; for(int a:c.admins) { commFile << a << (i<c.admins.size()-1?",":""); i++; } }
+        commFile << "\n";
     }
     commFile.close();
 
     // 4. Save Chats (Updated format with Type and ReplyID)
-    ofstream chatFile("data/chats.txt");
+     ofstream chatFile("data/chats.txt");
     for (auto const& [commId, comm] : communityDB) {
         for (const auto& msg : comm.chatHistory) {
-            chatFile << commId << "|" 
-                     << msg.id << "|" // SAVE ID
-                     << msg.senderId << "|" 
-                     << msg.senderName << "|" 
-                     << msg.timestamp << "|";
-            if (msg.upvoters.empty()) chatFile << "0"; 
-            else { int i=0; for(int uid : msg.upvoters) { chatFile << uid << (i < msg.upvoters.size()-1 ? "," : ""); i++; } }
-            chatFile << "|" << (msg.isPinned ? "1" : "0") << "|" << msg.replyToId << "|" << msg.type << "|" << sanitize(msg.content) << "\n";
+            chatFile << commId << "|" << msg.id << "|" << msg.senderId << "|" << msg.senderName << "|" << msg.timestamp << "|";
+            if (msg.upvoters.empty()) chatFile << "0"; else { int i=0; for(int uid : msg.upvoters) { chatFile << uid << (i < msg.upvoters.size()-1 ? "," : ""); i++; } }
+            chatFile << "|" << (msg.isPinned ? "1" : "0") << "|" << msg.replyToId << "|" << msg.type << "|";
+            
+            if (msg.type == "poll") chatFile << serializePoll(msg.poll);
+            else chatFile << sanitize(msg.content);
+            
+            chatFile << "\n";
         }
     }
     chatFile.close();
     
     // 5. Save DMs
-    ofstream dmFile("data/dms.txt");
+    ofstream dmOut("data/dms.txt");
     for (auto const& [key, chat] : dmDB) {
         for (const auto& m : chat.messages) {
-            dmFile << key << "|" << m.id << "|" << m.senderId << "|" << m.timestamp << "|" << m.replyToMsgId << "|" << (m.reaction.empty()?"NONE":m.reaction) << "|" << (m.isSeen?"1":"0") << "|" << sanitize(m.content) << "\n";
+            dmOut << key << "|" << m.id << "|" << m.senderId << "|" << m.timestamp << "|"
+                   << m.replyToMsgId << "|" << (m.reaction.empty() ? "NONE" : m.reaction) << "|"
+                   << (m.isSeen ? "1" : "0") << "|" << sanitize(m.content) << "\n";
         }
     }
-    dmFile.close();
+    dmOut.close();
 }
 
 // ==========================================
@@ -712,6 +727,40 @@ void NovaGraph::upvoteMessage(int commId, int userId, int msgIndex) {
 }
 
 // ==========================================
+// POLL LOGIC
+// ==========================================
+
+void NovaGraph::createPoll(int commId, int senderId, string question, bool allowMultiple, vector<string> options) {
+    if (communityDB.find(commId) != communityDB.end()) {
+        if (communityDB[commId].members.count(senderId)) {
+            Community& c = communityDB[commId];
+            Message m; m.id = c.nextMsgId++; m.senderId = senderId; m.senderName = userDB[senderId].username;
+            m.timestamp = getCurrentTime(); m.type = "poll"; m.content = "Poll: " + question;
+            m.poll.question = question; m.poll.allowMultiple = allowMultiple;
+            int optId=1; for(const string& txt: options) { PollOption o; o.id=optId++; o.text=txt; m.poll.options.push_back(o); }
+            c.chatHistory.push_back(m); saveData();
+        }
+    }
+}
+
+void NovaGraph::togglePollVote(int commId, int userId, int msgId, int optionId) {
+    if (communityDB.find(commId) == communityDB.end()) return;
+    Community& c = communityDB[commId];
+    for(auto& m : c.chatHistory) {
+        if (m.id == msgId && m.type == "poll") {
+            bool alreadyVotedThis = false;
+            for(auto& opt : m.poll.options) if(opt.id == optionId && opt.voterIds.count(userId)) { alreadyVotedThis = true; break; }
+            if (alreadyVotedThis) { for(auto& opt : m.poll.options) if (opt.id == optionId) opt.voterIds.erase(userId); }
+            else {
+                if (!m.poll.allowMultiple) for(auto& opt : m.poll.options) opt.voterIds.erase(userId);
+                for(auto& opt : m.poll.options) if (opt.id == optionId) opt.voterIds.insert(userId);
+            }
+            saveData(); return;
+        }
+    }
+}
+
+// ==========================================
 // JSON RESPONSES
 // ==========================================
 
@@ -788,10 +837,8 @@ string NovaGraph::getAllCommunitiesJSON() {
 string NovaGraph::getCommunityDetailsJSON(int commId, int userId, int offset, int limit) {
     if (communityDB.find(commId) == communityDB.end()) return "{}";
     Community& c = communityDB[commId];
-    // ... [Keep permissions checks] ...
-    bool isMember = c.members.count(userId); 
-    bool isMod = c.moderators.count(userId); 
-    bool isAdmin = c.admins.count(userId);
+    // ... [Keep Permissions] ...
+    bool isMember = c.members.count(userId); bool isMod = c.moderators.count(userId); bool isAdmin = c.admins.count(userId);
 
     string json = "{ \"id\": " + to_string(c.id) + 
                   ", \"name\": \"" + jsonEscape(c.name) + "\"" +
@@ -809,27 +856,35 @@ string NovaGraph::getCommunityDetailsJSON(int commId, int userId, int offset, in
         if (i < 0 || i >= total) continue;
         Message& m = c.chatHistory[i];
         bool hasVoted = m.upvoters.count(userId);
-        
-        string avatar = "";
-        if(userDB.find(m.senderId) != userDB.end()) avatar = userDB[m.senderId].avatarUrl;
+        string avatar = ""; if(userDB.find(m.senderId) != userDB.end()) avatar = userDB[m.senderId].avatarUrl;
 
-        // RESOLVE REPLY PREVIEW BY ID
+        // Build Poll JSON if type is poll
+        string pollJson = "null";
+        if (m.type == "poll") {
+            pollJson = "{ \"question\": \"" + jsonEscape(m.poll.question) + "\", \"multi\": " + (m.poll.allowMultiple?"true":"false") + ", \"options\": [";
+            for(size_t k=0; k<m.poll.options.size(); k++) {
+                const auto& opt = m.poll.options[k];
+                bool userVoted = opt.voterIds.count(userId);
+                pollJson += "{ \"id\": " + to_string(opt.id) + ", \"text\": \"" + jsonEscape(opt.text) + "\", \"count\": " + to_string(opt.voterIds.size()) + ", \"voted\": " + (userVoted?"true":"false") + " }";
+                if(k < m.poll.options.size()-1) pollJson += ", ";
+            }
+            pollJson += "] }";
+        }
+
+        // Reply Preview Logic
         string replyPreview = "";
         if (m.replyToId != -1) {
-            for (const auto& orig : c.chatHistory) {
-                if (orig.id == m.replyToId) { // MATCH BY ID NOW
-                    replyPreview = sanitize(orig.content.substr(0, 30));
-                    break;
-                }
-            }
+             for (const auto& orig : c.chatHistory) { if (orig.id == m.replyToId) { replyPreview = sanitize(orig.content.substr(0, 30)); break; } }
         }
 
         json += "{ \"index\": " + to_string(i) + 
-                ", \"id\": " + to_string(m.id) +  // SEND ID TO FRONTEND
+                ", \"id\": " + to_string(m.id) + 
                 ", \"sender\": \"" + jsonEscape(m.senderName) + "\"" +
                 ", \"senderId\": " + to_string(m.senderId) + 
                 ", \"senderAvatar\": \"" + jsonEscape(avatar) + "\"" + 
                 ", \"content\": \"" + jsonEscape(m.content) + "\"" +
+                ", \"type\": \"" + m.type + "\"" +
+                ", \"poll\": " + pollJson + 
                 ", \"time\": \"" + m.timestamp + "\"" +
                 ", \"votes\": " + to_string(m.upvoters.size()) + 
                 ", \"has_voted\": " + (hasVoted ? "true" : "false") + 
@@ -841,6 +896,7 @@ string NovaGraph::getCommunityDetailsJSON(int commId, int userId, int offset, in
     json += "] }";
     return json;
 }
+
 
 string NovaGraph::getConnectionsByDegreeJSON(int startNode, int targetDegree) {
     if (userDB.find(startNode) == userDB.end()) return "[]";

@@ -23,12 +23,10 @@ private:
     
     int nextCommunityId = 100;
 
-    vector<string> split(const string& s, char delimiter);
-
 public:
+	vector<string> split(const string& s, char delimiter);
     void loadData();
     void saveData();
-
     // AUTH
     int registerUser(string username, string email, string password, string avatar, string tags);
     int loginUser(string username, string password);
@@ -62,6 +60,11 @@ public:
     void promoteToAdmin(int commId, int actorId, int targetId);
     void demoteAdmin(int commId, int actorId, int targetId);
     void transferOwnership(int commId, int actorId, int targetId);
+	
+	// Creates a poll message
+    void createPoll(int commId, int senderId, string question, bool allowMultiple, vector<string> options);
+	// Toggles vote
+    void togglePollVote(int commId, int userId, int msgId, int optionId);
 
     // DIRECT MESSAGE
     void sendDirectMessage(int senderId, int receiverId, string content, int replyToId = -1);

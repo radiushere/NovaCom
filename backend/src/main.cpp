@@ -189,6 +189,25 @@ int main(int argc, char* argv[]) {
         if (argc < 3) return 1;
         cout << graph.getActiveDMsJSON(stoi(argv[2])) << endl;
     }
+	 else if (command == "create_poll") {
+        // create_poll <commId> <senderId> <question> <allowMulti> <opt1> <opt2> ...
+        if (argc < 6) return 1;
+        
+        string question = argv[4];
+        bool multi = (string(argv[5]) == "1");
+        vector<string> options;
+        for(int i=6; i<argc; i++) options.push_back(argv[i]);
+        
+        // Only ONE call now:
+        graph.createPoll(stoi(argv[2]), stoi(argv[3]), question, multi, options);
+        cout << "{ \"status\": \"poll_created\" }" << endl;
+    }
+    else if (command == "vote_poll") {
+        // vote_poll <commId> <userId> <msgId> <optionId>
+        if (argc < 6) return 1;
+        graph.togglePollVote(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]), stoi(argv[5]));
+        cout << "{ \"status\": \"voted\" }" << endl;
+    }
     else {
         cout << "{ \"error\": \"Unknown command\" }" << endl;
     }

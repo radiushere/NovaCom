@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { callBackend } from '../api';
+import PollMessage from './PollMessage';       // <--- ENSURE THIS FILE EXISTS
+import CreatePollModal from './CreatePollModal'; // <--- ENSURE THIS FILE EXISTS
 
 const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
   const [details, setDetails] = useState(null);
@@ -7,6 +9,9 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [msgInput, setMsgInput] = useState("");
   
+  // POLL MODAL STATE
+  const [showPollModal, setShowPollModal] = useState(false);
+
   // REPLY STATE
   const [replyTarget, setReplyTarget] = useState(null); 
 
@@ -70,16 +75,9 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!msgInput.trim()) return;
-    
-    // Include Reply ID
     const replyId = replyTarget ? replyTarget.index : -1;
     await callBackend('send_message', [commId, currentUserId, replyId, msgInput]);
-    
-    setMsgInput("");
-    setReplyTarget(null); // Clear reply
-    setOffset(0); 
-    isAtBottom.current = true; 
-    fetchLatest();
+    setMsgInput(""); setReplyTarget(null); setOffset(0); isAtBottom.current = true; fetchLatest();
   };
 
   const handleLeaveCommunity = async () => {
@@ -138,7 +136,6 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
             return (
               <div key={`${m.id}-${idx}`} className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}>
                  
-                 {/* Message Row */}
                  <div className={`flex max-w-[90%] gap-3 group items-end ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                     
                     {/* AVATAR */}
@@ -163,16 +160,24 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
                             </div>
                         )}
 
-                        {/* MAIN CONTENT */}
-                        <div className={`px-4 py-2 text-sm shadow-lg backdrop-blur-sm 
-                            ${m.pinned ? "border-2 border-cyan-supernova/50 shadow-[0_0_10px_rgba(0,240,255,0.2)]" : ""} 
-                            ${isMe 
-                                ? "bg-cyan-supernova/10 border border-cyan-supernova/30 text-white rounded-2xl rounded-tr-none" 
-                                : "bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-none"
-                            }
-                        `}>
-                            {m.content}
-                        </div>
+                        {/* MAIN CONTENT (TEXT OR POLL) */}
+                        {m.type === "poll" ? (
+                            <div className={`px-2 py-2 text-sm shadow-lg backdrop-blur-sm rounded-xl
+                                ${isMe ? "bg-cyan-supernova/10 border border-cyan-supernova/30" : "bg-white/5 border border-white/10"}
+                            `}>
+                                <PollMessage poll={m.poll} msgId={m.id} commId={commId} currentUserId={currentUserId} onUpdate={fetchLatest} />
+                            </div>
+                        ) : (
+                            <div className={`px-4 py-2 text-sm shadow-lg backdrop-blur-sm 
+                                ${m.pinned ? "border-2 border-cyan-supernova/50 shadow-[0_0_10px_rgba(0,240,255,0.2)]" : ""} 
+                                ${isMe 
+                                    ? "bg-cyan-supernova/10 border border-cyan-supernova/30 text-white rounded-2xl rounded-tr-none" 
+                                    : "bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-none"
+                                }
+                            `}>
+                                {m.content}
+                            </div>
+                        )}
 
                         {/* METADATA */}
                         <div className="absolute -bottom-5 w-full flex justify-between px-1 min-w-[60px]">
@@ -181,37 +186,17 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
                         </div>
                     </div>
 
-                    {/* HOVER TOOLS (Fixed Layout: Horizontal Row) */}
+                    {/* HOVER TOOLS */}
                     <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mb-2 bg-black/40 backdrop-blur rounded-lg p-1 border border-white/5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                         
-                         {/* Reply */}
-                         <button 
-                            onClick={() => setReplyTarget({ index: m.id, content: m.content })}
-                            className="p-1.5 text-gray-400 hover:text-cyan-supernova hover:bg-white/10 rounded"
-                            title="Reply"
-                         >
+                         <button onClick={() => setReplyTarget({ index: m.id, content: m.content })} className="p-1.5 text-gray-500 hover:text-cyan-supernova hover:bg-white/10 rounded" title="Reply">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
                          </button>
-
-                         {/* Vote */}
-                         <button 
-                            onClick={() => handleVote(m.index)} 
-                            className={`p-1.5 rounded text-xs ${m.has_voted ? "text-cyan-supernova font-bold" : "text-gray-400 hover:text-white hover:bg-white/10"}`} 
-                            title="Upvote"
-                         >
-                            ▲
-                         </button>
-                         
-                         {/* Mod / Owner Actions */}
+                         <button onClick={() => handleVote(m.index)} className={`p-1.5 rounded text-xs ${m.has_voted ? "text-cyan-supernova font-bold" : "text-gray-400 hover:text-white hover:bg-white/10"}`}>▲</button>
                          {(details.is_mod || isMe) && (
                             <>
-                                {details.is_mod && (
-                                    <button onClick={() => handlePin(m.index)} className={`p-1.5 text-xs rounded hover:bg-white/10 ${m.pinned ? "text-yellow-400" : "text-gray-400 hover:text-yellow-400"}`} title="Pin">📌</button>
-                                )}
-                                <button onClick={() => handleDelete(m.index)} className="p-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-white/10 rounded" title="Delete">🗑️</button>
-                                {details.is_mod && !isMe && (
-                                    <button onClick={() => handleBan(m.senderId)} className="px-1.5 py-0.5 text-[9px] text-red-500 font-bold border border-red-500/30 rounded hover:bg-red-500/10 ml-1" title="Ban">BAN</button>
-                                )}
+                                {details.is_mod && <button onClick={() => handlePin(m.index)} className={`p-1.5 text-xs rounded hover:bg-white/10 ${m.pinned ? "text-yellow-400" : "text-gray-400 hover:text-yellow-400"}`}>📌</button>}
+                                <button onClick={() => handleDelete(m.index)} className="p-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-white/10 rounded">🗑️</button>
+                                {details.is_mod && !isMe && <button onClick={() => handleBan(m.senderId)} className="px-1.5 py-0.5 text-[9px] text-red-500 font-bold border border-red-500/30 rounded hover:bg-red-500/10 ml-1">BAN</button>}
                             </>
                          )}
                     </div>
@@ -233,10 +218,19 @@ const CommunityChat = ({ commId, currentUserId, onLeave, onAbout }) => {
           </div>
       )}
 
+      {/* POLL MODAL */}
+      {showPollModal && <CreatePollModal commId={commId} currentUserId={currentUserId} onClose={() => setShowPollModal(false)} onRefresh={fetchLatest} />}
+
       {/* INPUT */}
       <div className="p-4 bg-void-black/80 border-t border-white/10 shrink-0">
         {details.is_member ? (
           <form onSubmit={handleSend} className="flex gap-2">
+            
+            {/* POLL BUTTON */}
+            <button type="button" onClick={() => setShowPollModal(true)} className="text-xl text-gray-400 hover:text-cyan-supernova px-2 transition">
+                📊
+            </button>
+
             <input 
               className="flex-1 bg-deep-void p-3 rounded-lg border border-white/10 text-white focus:border-cyan-supernova outline-none placeholder-gray-600 transition"
               placeholder={replyTarget ? "Type your reply..." : `Message #${details.name}...`}

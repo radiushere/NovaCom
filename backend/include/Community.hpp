@@ -6,18 +6,32 @@
 
 using namespace std;
 
+// 1. POLL STRUCTURES
+struct PollOption {
+    int id;
+    string text;
+    set<int> voterIds; // Who voted for this option
+};
+
+struct PollData {
+    string question;
+    bool allowMultiple;
+    vector<PollOption> options;
+};
+
 struct Message {
-    int id = 0; // Ensure ID exists and defaults to 0
+    int id = 0;
     int senderId;
     string senderName;
-    string content;
+    string content; // For text messages
     string timestamp;
     set<int> upvoters;
     bool isPinned = false;
     int replyToId = -1; 
-    string type = "text";
-    vector<string> pollOptions;
-    map<int, set<int>> pollVotes;
+    string type = "text"; // "text" or "poll"
+    
+    // 2. POLL DATA OBJECT
+    PollData poll; 
 };
 
 struct Community {
@@ -33,5 +47,5 @@ struct Community {
     set<int> admins;
     set<int> bannedUsers;
     
-    int nextMsgId = 1; // NEW: Track message IDs
+    int nextMsgId = 1;
 };
