@@ -1,8 +1,27 @@
 #include "../include/Graph.hpp"
 #include <iostream>
 #include <string>
+#include <fstream> 
+#include <sstream>
 
 using namespace std;
+
+// --- Helper to handle Large Arguments passed as Files ---
+string resolveArg(string arg) {
+    if (arg.rfind("FILE:", 0) == 0) { 
+        string path = arg.substr(5); // Remove "FILE:"
+        ifstream file(path, ios::binary); // Binary mode is safer for weird chars
+        if (file.is_open()) {
+            stringstream buffer;
+            buffer << file.rdbuf();
+            return buffer.str(); // Return the Base64 content
+        } else {
+            // Log error to stderr (Node.js will see this in console)
+            cerr << "[C++ Error] Failed to open temp file: " << path << endl;
+        }
+    }
+    return arg; 
+}
 
 int main(int argc, char* argv[]) {
     NovaGraph graph;
@@ -58,7 +77,6 @@ int main(int argc, char* argv[]) {
     }
     else if (command == "get_relationship") {
         if (argc < 4) return 1;
-        // Output: { "status": "friend" } or { "status": "pending_sent" } etc.
         cout << "{ \"status\": \"" << graph.getRelationshipStatus(stoi(argv[2]), stoi(argv[3])) << "\" }" << endl;
     }
     else if (command == "get_friends") {
@@ -96,16 +114,10 @@ int main(int argc, char* argv[]) {
         cout << graph.getCommunityMembersJSON(stoi(argv[2])) << endl;
     }
     else if (command == "send_message") {
-        // send_message <commId> <senderId> <replyToId> <content...>
-        if (argc < 6) return 1;
-        
-        int replyToId = stoi(argv[4]);
-        
-        string content = argv[5];
-        for (int i = 6; i < argc; ++i) content += " " + string(argv[i]);
-        
-        // Pass "text" as type (default)
-        graph.addMessage(stoi(argv[2]), stoi(argv[3]), content, "text", replyToId);
+        if (argc < 5) return 1;
+        string content = argv[4];
+        for (int i = 5; i < argc; ++i) content += " " + string(argv[i]);
+        graph.addMessage(stoi(argv[2]), stoi(argv[3]), content, "text", -1);
         cout << "{ \"status\": \"sent\" }" << endl;
     }
     else if (command == "search_users") {
@@ -160,22 +172,27 @@ int main(int argc, char* argv[]) {
         cout << "{ \"status\": \"transferred\" }" << endl;
     }
     else if (command == "send_dm") {
-        if (argc < 6) return 1;
+        if (argc < 8) return 1;
+        
         int replyId = stoi(argv[4]);
-        string content = argv[5];
-        for (int i = 6; i < argc; ++i) content += " " + string(argv[i]);
-        graph.sendDirectMessage(stoi(argv[2]), stoi(argv[3]), content, replyId);
+        string type = argv[5];
+        
+        // CRITICAL: Resolve the file argument to actual data
+        string mediaUrl = resolveArg(argv[6]); 
+        
+        string content = argv[7];
+        for (int i = 8; i < argc; ++i) content += " " + string(argv[i]);
+        
+        graph.sendDirectMessage(stoi(argv[2]), stoi(argv[3]), content, replyId, type, mediaUrl);
         cout << "{ \"status\": \"sent\" }" << endl;
     }
     else if (command == "get_dm") {
-        // get_dm <viewer> <friend> [offset] [limit]
         if (argc < 4) return 1;
         int offset = (argc > 4) ? stoi(argv[4]) : 0;
         int limit = (argc > 5) ? stoi(argv[5]) : 50;
         cout << graph.getDirectChatJSON(stoi(argv[2]), stoi(argv[3]), offset, limit) << endl;
     }
-	else if (command == "delete_dm") {
-        // delete_dm <userId> <friendId> <msgId>
+    else if (command == "delete_dm") {
         if (argc < 5) return 1;
         graph.deleteDirectMessage(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]));
         cout << "{ \"status\": \"deleted\" }" << endl;
@@ -189,21 +206,16 @@ int main(int argc, char* argv[]) {
         if (argc < 3) return 1;
         cout << graph.getActiveDMsJSON(stoi(argv[2])) << endl;
     }
-	 else if (command == "create_poll") {
-        // create_poll <commId> <senderId> <question> <allowMulti> <opt1> <opt2> ...
+    else if (command == "create_poll") {
         if (argc < 6) return 1;
-        
         string question = argv[4];
         bool multi = (string(argv[5]) == "1");
         vector<string> options;
         for(int i=6; i<argc; i++) options.push_back(argv[i]);
-        
-        // Only ONE call now:
         graph.createPoll(stoi(argv[2]), stoi(argv[3]), question, multi, options);
         cout << "{ \"status\": \"poll_created\" }" << endl;
     }
     else if (command == "vote_poll") {
-        // vote_poll <commId> <userId> <msgId> <optionId>
         if (argc < 6) return 1;
         graph.togglePollVote(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]), stoi(argv[5]));
         cout << "{ \"status\": \"voted\" }" << endl;

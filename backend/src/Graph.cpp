@@ -51,8 +51,9 @@ string jsonEscape(const string& s) {
 }
 
 string sanitize(string input) {
-    replace(input.begin(), input.end(), '\n', ' ');
-    replace(input.begin(), input.end(), '|', ' ');
+    replace(input.begin(), input.end(), '\n', ' '); // Remove Newlines
+    replace(input.begin(), input.end(), '\r', ' '); // Remove Carriage Returns
+    replace(input.begin(), input.end(), '|', ' ');  // Remove Pipes
     return input;
 }
 
@@ -220,8 +221,11 @@ void NovaGraph::loadData() {
     // 5. DMs
     ifstream dmFile("data/dms.txt");
     if (dmFile.is_open()) {
+        string line;
         while (getline(dmFile, line)) {
             auto parts = split(line, '|');
+            
+            // Check for Legacy Format (Size 8) vs New Format (Size 10)
             if (parts.size() >= 8) {
                 string key = parts[0];
                 DirectMessage m;
@@ -231,16 +235,32 @@ void NovaGraph::loadData() {
                 m.replyToMsgId = safeStoi(parts[4]);
                 m.reaction = (parts[5] == "NONE") ? "" : parts[5];
                 m.isSeen = (parts[6] == "1");
-                m.content = parts[7];
-                for (size_t i = 8; i < parts.size(); i++) m.content += " " + parts[i];
-                dmDB[key].chatKey = key; dmDB[key].messages.push_back(m);
+                
+                int contentIdx = 7; // Default for legacy
+                
+                // NEW FORMAT HANDLING
+                if (parts.size() >= 10) {
+                    m.type = parts[7];
+                    m.mediaUrl = parts[8];
+                    contentIdx = 9;
+                } else {
+                    // Default values for old messages
+                    m.type = "text";
+                    m.mediaUrl = "";
+                }
+
+                m.content = parts[contentIdx];
+                // Reassemble content if pipes existed
+                for (size_t i = contentIdx + 1; i < parts.size(); i++) m.content += " " + parts[i];
+
+                dmDB[key].chatKey = key;
+                dmDB[key].messages.push_back(m);
                 if (m.id >= dmDB[key].nextMsgId) dmDB[key].nextMsgId = m.id + 1;
             }
         }
         dmFile.close();
     }
 }
-
 
 void NovaGraph::saveData() {
     // 1. Save Users (Preserving Pending Requests)
@@ -295,12 +315,20 @@ void NovaGraph::saveData() {
     chatFile.close();
     
     // 5. Save DMs
-    ofstream dmOut("data/dms.txt");
+     ofstream dmOut("data/dms.txt");
     for (auto const& [key, chat] : dmDB) {
         for (const auto& m : chat.messages) {
-            dmOut << key << "|" << m.id << "|" << m.senderId << "|" << m.timestamp << "|"
-                   << m.replyToMsgId << "|" << (m.reaction.empty() ? "NONE" : m.reaction) << "|"
-                   << (m.isSeen ? "1" : "0") << "|" << sanitize(m.content) << "\n";
+            dmOut << key << "|" 
+                   << m.id << "|" 
+                   << m.senderId << "|" 
+                   << m.timestamp << "|"
+                   << m.replyToMsgId << "|" 
+                   << (m.reaction.empty() ? "NONE" : m.reaction) << "|"
+                   << (m.isSeen ? "1" : "0") << "|"
+                   << m.type << "|"
+                   // FIX: Sanitize mediaUrl to remove newlines
+                   << (m.mediaUrl.empty() ? "NONE" : sanitize(m.mediaUrl)) << "|"
+                   << sanitize(m.content) << "\n";
         }
     }
     dmOut.close();
@@ -370,11 +398,23 @@ string NovaGraph::getRelationshipStatus(int me, int target) {
 // CORE LOGIC & DMs
 // ==========================================
 
-void NovaGraph::sendDirectMessage(int senderId, int receiverId, string content, int replyToId) {
+void NovaGraph::sendDirectMessage(int senderId, int receiverId, string content, int replyToId, string type, string mediaUrl) {
     string key = getDMKey(senderId, receiverId);
-    DirectMessage m; m.id = dmDB[key].nextMsgId++; m.senderId = senderId; m.content = sanitize(content);
-    m.timestamp = getCurrentTime(); m.replyToMsgId = replyToId; m.reaction = ""; m.isSeen = false;
-    dmDB[key].chatKey = key; dmDB[key].messages.push_back(m);
+    
+    DirectMessage m;
+    m.id = dmDB[key].nextMsgId++;
+    m.senderId = senderId;
+    m.content = sanitize(content);
+    m.timestamp = getCurrentTime();
+    m.replyToMsgId = replyToId;
+    m.reaction = "";
+    m.isSeen = false;
+    m.type = type;
+    // FIX: Sanitize incoming mediaUrl immediately
+    m.mediaUrl = (mediaUrl.empty() ? "NONE" : sanitize(mediaUrl));
+
+    dmDB[key].chatKey = key;
+    dmDB[key].messages.push_back(m);
     saveData();
 }
 
@@ -390,8 +430,7 @@ void NovaGraph::reactToDirectMessage(int senderId, int receiverId, int msgId, st
 string NovaGraph::getDirectChatJSON(int viewerId, int friendId, int offset, int limit) {
     string key = getDMKey(viewerId, friendId);
     
-    // 1. Mark Seen (Only for latest messages logic, technically we should only mark seen if fetching offset 0)
-    // But for simplicity, we mark seen whenever we fetch the chat.
+    // Mark Seen
     bool stateChanged = false;
     if (dmDB.find(key) != dmDB.end()) {
         for (auto& m : dmDB[key].messages) {
@@ -403,7 +442,6 @@ string NovaGraph::getDirectChatJSON(int viewerId, int friendId, int offset, int 
     }
     if (stateChanged) saveData();
 
-    // 2. Pagination Logic
     if (dmDB.find(key) == dmDB.end()) {
         return "{ \"friend_id\": " + to_string(friendId) + ", \"total_msgs\": 0, \"messages\": [] }";
     }
@@ -425,7 +463,9 @@ string NovaGraph::getDirectChatJSON(int viewerId, int friendId, int offset, int 
         if (m.replyToMsgId != -1) {
             for (const auto& orig : allMsgs) {
                 if (orig.id == m.replyToMsgId) {
-                    replyPreview = sanitize(orig.content.substr(0, 30));
+                    // Preview content: if image, say [Image], else text
+                    string previewText = (orig.type == "image") ? "[Image]" : orig.content;
+                    replyPreview = sanitize(previewText.substr(0, 30));
                     break;
                 }
             }
@@ -433,12 +473,14 @@ string NovaGraph::getDirectChatJSON(int viewerId, int friendId, int offset, int 
 
         json += "{ \"id\": " + to_string(m.id) + 
                 ", \"senderId\": " + to_string(m.senderId) + 
-                ", \"content\": \"" + m.content + "\"" +
+                ", \"content\": \"" + jsonEscape(m.content) + "\"" +
                 ", \"time\": \"" + m.timestamp + "\"" +
                 ", \"replyTo\": " + to_string(m.replyToMsgId) + 
-                ", \"replyPreview\": \"" + replyPreview + "\"" +
+                ", \"replyPreview\": \"" + jsonEscape(replyPreview) + "\"" +
                 ", \"reaction\": \"" + m.reaction + "\"" +
-                ", \"isSeen\": " + (m.isSeen ? "true" : "false") + " }";
+                ", \"isSeen\": " + (m.isSeen ? "true" : "false") + 
+                ", \"type\": \"" + m.type + "\"" +
+                ", \"mediaUrl\": \"" + jsonEscape(m.mediaUrl) + "\" }";
         
         if (i < end - 1) json += ", ";
     }

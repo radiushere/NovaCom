@@ -5,19 +5,23 @@
 using namespace std;
 
 struct DirectMessage {
-    int id;              // Unique ID within the chat
+    int id;              
     int senderId;
     string content;
     string timestamp;
     
-    // METADATA FIELDS
-    int replyToMsgId = -1;  // Context: ID of the message being replied to
-    string reaction = "";   // Emoji reaction
-    bool isSeen = false;    // Read receipt
+    // METADATA
+    int replyToMsgId = -1;  
+    string reaction = "";   
+    bool isSeen = false;    
+    
+    // NEW MEDIA FIELDS
+    string type = "text";   // "text" or "image"
+    string mediaUrl = "";   // URL or Base64 string
 };
 
 struct DirectChat {
-    string chatKey; // "minID_maxID"
+    string chatKey; 
     vector<DirectMessage> messages;
-    int nextMsgId = 1; // Auto-incrementer for message IDs
+    int nextMsgId = 1; 
 };

@@ -67,7 +67,7 @@ public:
     void togglePollVote(int commId, int userId, int msgId, int optionId);
 
     // DIRECT MESSAGE
-    void sendDirectMessage(int senderId, int receiverId, string content, int replyToId = -1);
+    void sendDirectMessage(int senderId, int receiverId, string content, int replyToId = -1, string type = "text", string mediaUrl = "");
     void reactToDirectMessage(int senderId, int receiverId, int msgId, string reaction);
 	void deleteDirectMessage(int userId, int friendId, int msgId);
     string getDirectChatJSON(int viewerId, int friendId, int offset = 0, int limit = 50);
