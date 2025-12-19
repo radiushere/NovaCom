@@ -46,11 +46,18 @@ const ProfileView = ({ targetId, currentUserId, returnPath, onBack, onNavigate, 
     alert(`Signal Link established with ${user.name}.`);
   };
 
+  // --- NEW: UNFRIEND HANDLER ---
+  const handleUnfriend = async () => {
+      if(window.confirm(`Are you sure you want to disconnect from ${user.name}?`)) {
+          await callBackend('remove_friend', [currentUserId, targetId]);
+          setIsFriend(false);
+      }
+  };
+
   const handleMessage = () => {
       if(onNavigate) onNavigate(`dm_${user.id}_${user.name}`);
   };
 
-  // --- NEW HANDLERS ---
   const handleLogout = () => {
       if (window.confirm("End session and logout?")) {
           onLogout();
@@ -61,7 +68,7 @@ const ProfileView = ({ targetId, currentUserId, returnPath, onBack, onNavigate, 
       const confirmDelete = prompt("WARNING: This will permanently delete your account and all data. Type 'DELETE' to confirm.");
       if (confirmDelete === 'DELETE') {
           await callBackend('delete_user', [currentUserId]);
-          onLogout(); // Redirect to login
+          onLogout(); 
       }
   };
 
@@ -157,39 +164,36 @@ const ProfileView = ({ targetId, currentUserId, returnPath, onBack, onNavigate, 
                     </div>
                 </div>
 
-                {/* --- ACTION BUTTONS (UPDATED) --- */}
+                {/* --- ACTION BUTTONS --- */}
                 <div className="pt-4 flex justify-center gap-4">
                     {isSelf ? (
                         <>
-                            <button 
-                                onClick={() => setIsEditing(true)} 
-                                className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl border border-white/20 transition font-bold tracking-wide"
-                            >
+                            <button onClick={() => setIsEditing(true)} className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl border border-white/20 transition font-bold tracking-wide">
                                 EDIT PROFILE
                             </button>
-                            
-                            {/* LOGOUT BUTTON */}
-                            <button 
-                                onClick={handleLogout} 
-                                className="bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 px-6 py-3 rounded-xl border border-yellow-500/30 transition font-bold tracking-wide"
-                            >
+                            <button onClick={handleLogout} className="bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 px-6 py-3 rounded-xl border border-yellow-500/30 transition font-bold tracking-wide">
                                 LOGOUT
                             </button>
-
-                            {/* DELETE BUTTON */}
-                            <button 
-                                onClick={handleDeleteAccount} 
-                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-6 py-3 rounded-xl border border-red-500/30 transition font-bold tracking-wide"
-                            >
+                            <button onClick={handleDeleteAccount} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-6 py-3 rounded-xl border border-red-500/30 transition font-bold tracking-wide">
                                 DELETE ACCOUNT
                             </button>
                         </>
                     ) : (
                         <>
                             {isFriend ? (
-                                <button disabled className="bg-gray-800 text-gray-400 font-bold px-6 py-3 rounded-xl cursor-not-allowed border border-white/5">
-                                    ✅ Connected
-                                </button>
+                                <div className="flex gap-2">
+                                    <button disabled className="bg-gray-800 text-gray-400 font-bold px-6 py-3 rounded-xl cursor-not-allowed border border-white/5">
+                                        ✅ Connected
+                                    </button>
+                                    
+                                    {/* UNFRIEND BUTTON */}
+                                    <button 
+                                        onClick={handleUnfriend} 
+                                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold px-6 py-3 rounded-xl border border-red-500/30 transition shadow-lg"
+                                    >
+                                        Unfriend
+                                    </button>
+                                </div>
                             ) : (
                                 <button onClick={handleConnect} className="bg-cosmic-purple hover:bg-purple-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg">
                                     CONNECT

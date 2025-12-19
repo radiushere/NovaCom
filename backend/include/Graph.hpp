@@ -60,6 +60,7 @@ public:
     void promoteToAdmin(int commId, int actorId, int targetId);
     void demoteAdmin(int commId, int actorId, int targetId);
     void transferOwnership(int commId, int actorId, int targetId);
+	void removeFriendship(int u, int v);
 	
 	// Creates a poll message
     void createPoll(int commId, int senderId, string question, bool allowMultiple, vector<string> options);

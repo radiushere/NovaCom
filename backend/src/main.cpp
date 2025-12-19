@@ -131,6 +131,11 @@ int main(int argc, char* argv[]) {
         string t = (argc > 3) ? argv[3] : "All";
         cout << graph.searchUsersJSON(q, t) << endl;
     }
+	else if (command == "remove_friend") {
+        if (argc < 4) return 1;
+        graph.removeFriendship(stoi(argv[2]), stoi(argv[3]));
+        cout << "{ \"status\": \"removed\" }" << endl;
+    }
     else if (command == "get_popular") {
         cout << graph.getPopularCommunitiesJSON() << endl;
     }

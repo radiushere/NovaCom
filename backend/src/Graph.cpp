@@ -555,6 +555,20 @@ string NovaGraph::getActiveDMsJSON(int userId) {
     return json;
 }
 
+void NovaGraph::removeFriendship(int u, int v) {
+    // Remove v from u's list
+    if (adjList.find(u) != adjList.end()) {
+        auto& friends = adjList[u];
+        friends.erase(remove(friends.begin(), friends.end(), v), friends.end());
+    }
+    // Remove u from v's list
+    if (adjList.find(v) != adjList.end()) {
+        auto& friends = adjList[v];
+        friends.erase(remove(friends.begin(), friends.end(), u), friends.end());
+    }
+    saveData();
+}
+
 // ==========================================
 // USER & GRAPH LOGIC
 // ==========================================
