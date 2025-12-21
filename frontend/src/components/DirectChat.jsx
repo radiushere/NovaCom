@@ -3,49 +3,66 @@ import { callBackend } from '../api';
 
 const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
   const [messages, setMessages] = useState([]);
+  const [friendData, setFriendData] = useState(null); 
   const [msgInput, setMsgInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null); 
   const [expandedImage, setExpandedImage] = useState(null);
 
-  // RECORDING STATE
+  // Voice Note Logic
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  // Pagination State
+  // Infinite Scroll & Pagination
   const [offset, setOffset] = useState(0);
   const [totalMsgs, setTotalMsgs] = useState(0);
   const [loading, setLoading] = useState(false);
   const MSG_LIMIT = 50;
 
+  // Scroll Management Refs
   const scrollRef = useRef(null); 
   const prevScrollHeight = useRef(0);
   const isAtBottom = useRef(true);
   const loadingHistory = useRef(false);
   const fileInputRef = useRef(null);
 
-  // 1. Fetch Latest Data
-  const fetchLatest = async () => {
+  // Fetch DM Archives
+  const fetchMessages = async () => {
     if (loadingHistory.current) return;
     const data = await callBackend('get_dm', [currentUserId, friendId, 0, MSG_LIMIT]);
     if (data && data.messages) {
         setTotalMsgs(data.total_msgs || data.messages.length);
-        if (offset === 0) setMessages(data.messages);
+        if (offset === 0) {
+            setMessages(data.messages);
+        }
     }
   };
 
   useEffect(() => {
-    setOffset(0); isAtBottom.current = true; fetchLatest();
-    const interval = setInterval(() => { if (offset === 0) fetchLatest(); }, 2000);
+    // BUG FIX 1: Fetch profile for the avatar
+    callBackend('get_user', [friendId]).then(data => {
+        if(data && data.id) setFriendData(data);
+    });
+
+    setOffset(0);
+    isAtBottom.current = true;
+    fetchMessages();
+    
+    const interval = setInterval(() => {
+        if (offset === 0) fetchMessages();
+    }, 2000);
     return () => clearInterval(interval);
   }, [friendId]);
 
+  // Smooth Reverse Scroll Logic
   useLayoutEffect(() => {
     if (!scrollRef.current) return;
     const { scrollHeight } = scrollRef.current;
-    if (isAtBottom.current) scrollRef.current.scrollTop = scrollHeight;
-    else if (prevScrollHeight.current > 0) {
-        scrollRef.current.scrollTop = scrollHeight - prevScrollHeight.current;
+    if (isAtBottom.current) {
+        scrollRef.current.scrollTop = scrollHeight;
+    } else if (prevScrollHeight.current > 0) {
+        const heightDiff = scrollHeight - prevScrollHeight.current;
+        scrollRef.current.scrollTop = heightDiff;
         prevScrollHeight.current = 0;
     }
   }, [messages]);
@@ -56,20 +73,25 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
     isAtBottom.current = atBottom;
 
     if (scrollTop === 0 && messages.length < totalMsgs && !loading && !loadingHistory.current) {
-        setLoading(true); loadingHistory.current = true; prevScrollHeight.current = scrollHeight;
+        setLoading(true);
+        loadingHistory.current = true;
+        prevScrollHeight.current = scrollHeight;
         const newOffset = offset + MSG_LIMIT;
         const data = await callBackend('get_dm', [currentUserId, friendId, newOffset, MSG_LIMIT]);
-        if (data && data.messages.length > 0) { setMessages(prev => [...data.messages, ...prev]); setOffset(newOffset); }
-        setLoading(false); loadingHistory.current = false;
+        if (data && data.messages.length > 0) {
+            setMessages(prev => [...data.messages, ...prev]);
+            setOffset(newOffset);
+        }
+        setLoading(false);
+        loadingHistory.current = false;
     }
   };
 
-  // --- ACTIONS ---
-
+  // Multimedia Handlers
   const sendMessage = async (content, type = "text", mediaUrl = "NONE") => {
     const replyId = replyTarget ? replyTarget.id : -1;
     await callBackend('send_dm', [currentUserId, friendId, replyId, type, mediaUrl, content]);
-    setMsgInput(""); setReplyTarget(null); setOffset(0); isAtBottom.current = true; fetchLatest();
+    setMsgInput(""); setReplyTarget(null); setOffset(0); isAtBottom.current = true; fetchMessages();
   };
 
   const handleSendText = async (e) => {
@@ -79,24 +101,29 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
   };
 
   const handleReaction = async (msgId) => {
-    const reaction = prompt("Enter Emoji:");
-    if (reaction) { await callBackend('react_dm', [currentUserId, friendId, msgId, reaction]); fetchLatest(); }
+    const reaction = prompt("Input Emoji Reaction:");
+    if (reaction) {
+        await callBackend('react_dm', [currentUserId, friendId, msgId, reaction]);
+        fetchMessages();
+    }
   };
 
   const handleDelete = async (msgId) => {
-      if(window.confirm("Unsend this message?")) { await callBackend('delete_dm', [currentUserId, friendId, msgId]); fetchLatest(); }
+      if(window.confirm("Unsend this message?")) {
+          await callBackend('delete_dm', [currentUserId, friendId, msgId]);
+          fetchMessages();
+      }
   };
 
   const handleFileSelect = (e) => {
       const file = e.target.files[0];
       if (file) {
           const reader = new FileReader();
-          reader.onloadend = () => sendMessage("Sent an image", "image", reader.result);
+          reader.onloadend = () => sendMessage("Sent an Image", "image", reader.result);
           reader.readAsDataURL(file);
       }
+      e.target.value = ''; // Reset for re-selection
   };
-
-  // --- VOICE NOTE LOGIC ---
 
   const startRecording = async () => {
     try {
@@ -104,178 +131,207 @@ const DirectChat = ({ currentUserId, friendId, friendName, onBack }) => {
         const recorder = new MediaRecorder(stream);
         mediaRecorderRef.current = recorder;
         audioChunksRef.current = [];
-
-        recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunksRef.current.push(e.data);
-        };
-
+        recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
         recorder.onstop = () => {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
             const reader = new FileReader();
-            reader.readAsDataURL(audioBlob); 
-            reader.onloadend = () => {
-                sendMessage("Voice Message 🎤", "audio", reader.result);
-            };
+            reader.readAsDataURL(new Blob(audioChunksRef.current, { type: 'audio/webm' })); 
+            reader.onloadend = () => sendMessage("Voice Message 🎤", "audio", reader.result);
             stream.getTracks().forEach(track => track.stop());
         };
-
-        recorder.start();
-        setIsRecording(true);
-    } catch (err) {
-        console.error("Mic access denied:", err);
-        alert("Cannot access microphone. Check permissions.");
-    }
+        recorder.start(); setIsRecording(true);
+    } catch (err) { alert("Mic Access Required."); }
   };
 
   const stopRecording = () => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-          setIsRecording(false);
+          mediaRecorderRef.current.stop(); setIsRecording(false);
       }
   };
 
   return (
-    <div className="flex flex-col h-full animate-fade-in relative bg-void-black/50">
+    <div className="flex flex-col h-full animate-fade-in relative bg-void-black/50 overflow-hidden">
       
-      {/* HEADER */}
+      {/* HEADER SECTION */}
       <div className="p-4 border-b border-white/10 bg-void-black/80 backdrop-blur z-20 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold border border-white/20">
-                {friendName[0].toUpperCase()}
+            {/* BUG FIX 1: Avatar rendering */}
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold border border-white/20 overflow-hidden shadow-lg">
+                {friendData?.avatar && friendData.avatar !== "NULL" ? (
+                    <img src={friendData.avatar} className="w-full h-full object-cover" alt="p" />
+                ) : (
+                    <span className="font-orbitron">{friendName[0].toUpperCase()}</span>
+                )}
             </div>
             <div>
-                <h2 className="text-lg font-orbitron text-white tracking-wide">@{friendName}</h2>
-                <p className="text-[10px] text-green-400 uppercase tracking-widest">Encrypted Signal</p>
+                <h2 className="text-xl font-orbitron text-white tracking-widest uppercase">@{friendName}</h2>
+                <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                    <p className="text-[9px] text-green-400 uppercase tracking-widest font-bold">Secure Frequency</p>
+                </div>
             </div>
         </div>
-        <button onClick={onBack} className="text-gray-400 hover:text-white px-3 py-1 hover:bg-white/10 rounded transition">✕ Close</button>
+        <button onClick={onBack} className="text-gray-400 hover:text-white px-4 py-2 hover:bg-white/5 rounded-lg transition-all border border-transparent hover:border-white/10 font-bold uppercase text-xs">
+            ✕ Terminate
+        </button>
       </div>
 
-      {/* MESSAGES AREA */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-gray-700">
-        {loading && <div className="text-center text-xs text-cyan-supernova animate-pulse pb-2">Retrieving Archives...</div>}
+      {/* CHAT MESSAGES AREA */}
+      <div 
+        ref={scrollRef} 
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-8 scrollbar-thin scrollbar-thumb-cyan-supernova/20"
+      >
+        {loading && <div className="text-center text-xs text-cyan-supernova animate-pulse pb-4 uppercase tracking-[0.2em]">Decrypting Archives...</div>}
 
         {messages.map((m) => {
             const isMe = m.senderId === parseInt(currentUserId);
             return (
                 <div key={m.id} className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}>
-                    <div className={`flex max-w-[80%] items-end gap-2 group ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`flex max-w-[85%] items-end gap-3 group ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                         
                         <div className="relative flex flex-col">
-                            {/* Reply Preview */}
+                            {/* Nested Reply Visual */}
                             {m.replyTo !== -1 && (
-                                <div className={`text-xs p-2 rounded-t-lg mb-0.5 border-l-2 ${isMe ? "bg-purple-900/50 border-purple-400 text-purple-200" : "bg-gray-800 border-gray-500 text-gray-400"}`}>
-                                    <span className="opacity-70 text-[10px] uppercase block mb-1">Replying to:</span>
-                                    <span className="italic line-clamp-1">"{m.replyPreview || "Unavailable"}"</span>
+                                <div className={`text-[11px] p-2.5 rounded-t-xl mb-0.5 border-l-2 ${isMe ? "bg-purple-900/40 border-purple-400 text-purple-200" : "bg-gray-800/80 border-gray-500 text-gray-400"} backdrop-blur-sm`}>
+                                    <span className="opacity-50 uppercase font-bold block mb-1 text-[9px] tracking-widest">Incoming Context</span>
+                                    <span className="italic line-clamp-1 opacity-80">"{m.replyPreview || "Signal unavailable"}"</span>
                                 </div>
                             )}
 
-                            {/* MAIN BUBBLE CONTENT */}
+                            {/* BUBBLE CONTENT */}
                             <div 
-                                className={`shadow-lg backdrop-blur-sm cursor-pointer overflow-hidden
-                                    ${m.replyTo !== -1 ? "rounded-b-xl rounded-tr-xl" : "rounded-2xl"}
+                                className={`shadow-2xl backdrop-blur-md cursor-pointer transition-all hover:brightness-110
+                                    ${m.replyTo !== -1 ? "rounded-b-2xl rounded-tr-2xl" : "rounded-3xl"}
                                     ${isMe 
-                                        ? "bg-gradient-to-br from-cosmic-purple to-purple-700 text-white rounded-tr-none" 
+                                        ? "bg-gradient-to-br from-cosmic-purple to-purple-800 text-white rounded-tr-none border border-purple-400/20" 
                                         : "bg-deep-void border border-white/10 text-gray-100 rounded-tl-none"
                                     }
                                 `}
                                 onDoubleClick={() => handleReaction(m.id)}
                             >
                                 {m.type === 'image' ? (
-                                    <div className="p-1">
-                                        <img src={m.mediaUrl} alt="sent" className="max-w-[250px] max-h-[300px] rounded-lg object-cover hover:opacity-90 transition" onClick={() => setExpandedImage(m.mediaUrl)} />
-                                    </div>
-                                ) : m.type === 'audio' ? (
-                                    // IMPROVED AUDIO PLAYER DESIGN
-                                    <div className="p-2 min-w-[260px] flex items-center justify-center">
-                                        <audio 
-                                            controls 
+                                    <div className="p-1.5">
+                                        <img 
                                             src={m.mediaUrl} 
-                                            className="w-full h-10 rounded-md focus:outline-none" 
-                                            style={{ filter: isMe ? "invert(1) hue-rotate(180deg)" : "invert(0.9)" }} // Stylistic filter to blend better
+                                            className="max-w-[280px] max-h-[350px] rounded-2xl object-cover hover:scale-[1.02] transition-transform duration-300" 
+                                            onClick={() => setExpandedImage(m.mediaUrl)} 
+                                            alt="media" 
                                         />
                                     </div>
+                                ) : m.type === 'audio' ? (
+                                    <div className="p-4 min-w-[280px] flex items-center justify-center">
+                                        <audio controls src={m.mediaUrl} className="w-full h-9 rounded-full filter invert brightness-150 grayscale" />
+                                    </div>
                                 ) : (
-                                    <div className="px-4 py-3 text-sm">{m.content}</div>
+                                    <div className="px-5 py-3.5 text-sm leading-relaxed tracking-wide font-medium">{m.content}</div>
                                 )}
                             </div>
 
-                            {/* Metadata */}
-                            <div className="absolute -bottom-5 w-full flex justify-between px-1">
-                                {m.reaction ? <div className="bg-black/80 rounded-full px-1.5 py-0.5 text-xs border border-white/20 shadow -mt-2 z-10">{m.reaction}</div> : <span></span>}
-                                <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                            {/* MESSAGE METADATA */}
+                            <div className="absolute -bottom-6 w-full flex justify-between px-2 items-center">
+                                <div className="flex gap-2 items-center">
+                                    {m.reaction ? (
+                                        <div className="bg-void-black/80 rounded-full px-2 py-0.5 text-[10px] border border-white/10 shadow-lg -mt-3 z-10 animate-slide-up">
+                                            {m.reaction}
+                                        </div>
+                                    ) : null}
+                                </div>
+                                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-tighter flex items-center gap-1.5">
                                     {m.time}
-                                    {isMe && <span>{m.isSeen ? <span className="text-cyan-supernova font-bold">✓✓</span> : "✓"}</span>}
+                                    {isMe && (
+                                        <span>{m.isSeen ? <span className="text-cyan-supernova drop-shadow-glow">✓✓ Seen</span> : <span className="opacity-40">✓</span>}</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Hover Tools */}
-                        <div className={`flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? "items-end" : "items-start"}`}>
-                            <button onClick={() => setReplyTarget({ id: m.id, content: m.type==='image'?'[Image]':m.type==='audio'?'[Audio]':m.content })} className="p-1.5 text-gray-500 hover:text-cyan-supernova hover:bg-white/10 rounded-full">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+                        {/* HOVER ACTIONS (HORIZONTAL BAR) */}
+                        <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 mb-3 bg-black/40 p-1 rounded-full border border-white/5 backdrop-blur-sm ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                            <button 
+                                onClick={() => setReplyTarget({ id: m.id, content: m.type==='image'?'[Image]':m.type==='audio'?'[Voice]':m.content })} 
+                                className="p-1.5 text-gray-400 hover:text-cyan-supernova hover:bg-white/5 rounded-full transition"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
                             </button>
                             {isMe && (
-                                <button onClick={() => handleDelete(m.id)} className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-white/10 rounded-full">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                <button 
+                                    onClick={() => handleDelete(m.id)} 
+                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white/5 rounded-full transition"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                 </button>
                             )}
                         </div>
+
                     </div>
                 </div>
             );
         })}
       </div>
 
-      {/* REPLY CONTEXT */}
-      {replyTarget && (
-          <div className="bg-black/80 border-t border-cyan-supernova/30 p-2 px-4 flex justify-between items-center animate-slide-up backdrop-blur shrink-0">
-              <div className="text-xs text-gray-300 pl-2 border-l-2 border-cyan-supernova"><span className="text-cyan-supernova font-bold mr-2">Replying to:</span> <span className="italic opacity-80 line-clamp-1">{replyTarget.content}</span></div>
-              <button onClick={() => setReplyTarget(null)} className="text-gray-500 hover:text-white hover:bg-white/10 rounded-full p-1 transition">✕</button>
-          </div>
-      )}
+      {/* FOOTER & INPUT UI */}
+      <div className="shrink-0 bg-void-black/95 border-t border-white/10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+        {/* Active Reply Banner */}
+        {replyTarget && (
+            <div className="p-2.5 px-5 flex justify-between bg-cyan-supernova/5 text-xs animate-slide-up border-b border-cyan-supernova/10">
+                <span className="text-gray-400 flex items-center gap-2">
+                    <span className="text-cyan-supernova font-bold uppercase tracking-widest text-[9px]">Replying to</span>
+                    <span className="italic opacity-80 truncate max-w-sm">"{replyTarget.content}"</span>
+                </span>
+                <button onClick={() => setReplyTarget(null)} className="text-gray-500 hover:text-white p-1 rounded-full bg-white/5 transition">✕</button>
+            </div>
+        )}
 
-      {/* INPUT BAR */}
-      <form onSubmit={handleSendText} className="p-4 border-t border-white/10 bg-void-black/90 flex gap-3 shrink-0 items-center select-none">
-        
-        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
-        
-        <button type="button" onClick={() => fileInputRef.current.click()} className="text-gray-400 hover:text-cyan-supernova p-2 rounded-full hover:bg-white/5 transition" title="Image">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        </button>
+        <form onSubmit={handleSendText} className="p-5 flex gap-4 items-center">
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
+            
+            <div className="flex gap-2">
+                <button 
+                    type="button" 
+                    onClick={() => fileInputRef.current.click()} 
+                    className="text-gray-400 hover:text-cyan-supernova transition-all hover:scale-110 active:scale-90 p-1"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </button>
 
-        {/* PUSH TO TALK BUTTON */}
-        <button 
-            type="button" 
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onMouseLeave={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            className={`p-2 rounded-full transition duration-200 ${isRecording ? "bg-red-500 text-white animate-pulse shadow-[0_0_15px_red]" : "text-gray-400 hover:text-white hover:bg-white/5"}`}
-            title="Hold to Record"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        </button>
+                <button 
+                    type="button" 
+                    onMouseDown={startRecording} 
+                    onMouseUp={stopRecording} 
+                    onTouchStart={startRecording} 
+                    onTouchEnd={stopRecording} 
+                    className={`transition-all duration-300 p-1 ${isRecording ? "text-red-500 scale-150 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "text-gray-400 hover:text-cyan-supernova hover:scale-110"}`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </button>
+            </div>
 
-        <input 
-            className="flex-1 bg-deep-void px-4 py-3 rounded-xl border border-white/10 text-white focus:border-cyan-supernova focus:ring-1 focus:ring-cyan-supernova outline-none placeholder-gray-600 transition"
-            placeholder={replyTarget ? "Type your reply..." : isRecording ? "Recording Audio..." : "Send a secure message..."}
-            value={msgInput}
-            onChange={e => setMsgInput(e.target.value)}
-            disabled={isRecording}
-        />
-        <button type="submit" className="bg-cyan-supernova text-black font-bold px-6 py-3 rounded-xl hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.4)] transition">SEND</button>
-      </form>
+            <input 
+                className="flex-1 bg-deep-void px-5 py-3.5 rounded-2xl text-sm text-white outline-none border border-white/10 focus:border-cyan-supernova/50 transition-all focus:shadow-[0_0_15px_rgba(0,240,255,0.1)] placeholder:text-gray-600 font-medium" 
+                placeholder={isRecording ? "SECURE AUDIO RECORDING IN PROGRESS..." : "ENTER TRANSMISSION..."} 
+                value={msgInput} 
+                onChange={e => setMsgInput(e.target.value)} 
+                disabled={isRecording} 
+            />
+            
+            <button 
+                type="submit" 
+                className="bg-cyan-supernova text-black font-black px-8 py-3.5 rounded-2xl hover:bg-cyan-400 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all active:scale-95 uppercase tracking-widest text-xs"
+            >
+                Transmit
+            </button>
+        </form>
+      </div>
 
-      {/* IMAGE MODAL */}
+      {/* FULLSCREEN IMAGE OVERLAY */}
       {expandedImage && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-fade-in" onClick={() => setExpandedImage(null)}>
-              <button onClick={() => setExpandedImage(null)} className="absolute top-6 right-6 text-white hover:text-red-500 bg-white/10 hover:bg-white/20 p-2 rounded-full transition">✕</button>
-              <img src={expandedImage} className="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain cursor-default" onClick={(e) => e.stopPropagation()} alt="Enlarged"/>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/98 p-10 animate-fade-in cursor-zoom-out" onClick={() => setExpandedImage(null)}>
+              <div className="absolute top-10 right-10 flex gap-4">
+                  <button className="bg-white/10 hover:bg-red-500 text-white p-3 rounded-full transition-all">✕</button>
+              </div>
+              <img src={expandedImage} className="max-w-full max-h-full rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-white/10" alt="Enlarged Signal"/>
           </div>
       )}
-
     </div>
   );
 };
