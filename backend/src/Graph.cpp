@@ -989,6 +989,23 @@ string NovaGraph::getCommunityDetailsJSON(int commId, int userId, int offset, in
     return json;
 }
 
+string NovaGraph::getJoinedCommunitiesJSON(int userId) {
+    string json = "[";
+    int count = 0;
+
+    for (auto const& [id, c] : communityDB) {
+        // ONLY add to JSON if the user is actually in the members set
+        if (c.members.count(userId)) {
+            if (count > 0) json += ", ";
+            json += "{ \"id\": " + to_string(c.id) + 
+                    ", \"name\": \"" + jsonEscape(c.name) + "\" }";
+            count++;
+        }
+    }
+    json += "]";
+    return json;
+}
+
 string NovaGraph::getConnectionsByDegreeJSON(int startNode, int targetDegree) {
     if (userDB.find(startNode) == userDB.end()) return "[]";
     queue<pair<int, int>> q; q.push({ startNode, 0 }); set<int> visited; visited.insert(startNode);

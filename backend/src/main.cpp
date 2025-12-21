@@ -231,6 +231,10 @@ int main(int argc, char* argv[]) {
         graph.togglePollVote(stoi(argv[2]), stoi(argv[3]), stoi(argv[4]), stoi(argv[5]));
         cout << "{ \"status\": \"voted\" }" << endl;
     }
+	else if (command == "get_my_communities") {
+		if (argc < 3) return 1;
+		cout << graph.getJoinedCommunitiesJSON(stoi(argv[2])) << endl;
+	}
     else {
         cout << "{ \"error\": \"Unknown command\" }" << endl;
     }

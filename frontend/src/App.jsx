@@ -20,17 +20,21 @@ function App() {
   const [joinedCommunities, setJoinedCommunities] = useState([]);
   const [returnPath, setReturnPath] = useState(null);
 
+  // Fetch Joined Communities & User Data
   useEffect(() => {
     if (!currentUserId) return;
     
-    callBackend('get_all_communities').then(all => {
-       if(Array.isArray(all)) setJoinedCommunities(all);
+    // FIX: Instead of 'get_all_communities', we use 'get_my_communities'
+    callBackend('get_my_communities', [currentUserId]).then(data => {
+       if(Array.isArray(data)) {
+           setJoinedCommunities(data);
+       }
     });
 
     callBackend('get_user', [currentUserId]).then(data => {
         if(data && data.id) setCurrentUser(data);
     });
-  }, [currentUserId, activeTab]);
+  }, [currentUserId, activeTab]); // Fetches whenever you switch tabs or login
 
   const handleNavigate = (tab) => { setReturnPath(null); setActiveTab(tab); };
 

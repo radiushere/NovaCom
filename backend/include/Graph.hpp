@@ -89,4 +89,6 @@ public:
     int getRelationDegree(int startNode, int targetNode);
     // Added this missing function to fix the error:
     string getConnectionsByDegreeJSON(int startNode, int targetDegree);
+	
+	string getJoinedCommunitiesJSON(int userId);
 };
