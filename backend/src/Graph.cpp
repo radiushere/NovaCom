@@ -1560,34 +1560,40 @@ string NovaGraph::getGraphVisualJSON()
 {
     string json = "{ \"nodes\": [";
     int count = 0;
-    for (auto const &[id, user] : userDB)
+    for (auto const &[id, u] : userDB)
     {
         if (count > 0)
             json += ", ";
         int friendCount = adjList[id].size();
-        json += "{ \"id\": " + to_string(id) + ", \"name\": \"" + jsonEscape(user.username) + "\", \"val\": " + to_string(friendCount + 1) + " }";
+
+        // ADDED "avatar" field here
+        json += "{ \"id\": " + to_string(id) +
+                ", \"name\": \"" + jsonEscape(u.username) + "\"" +
+                ", \"avatar\": \"" + jsonEscape(u.avatarUrl) + "\"" +
+                ", \"val\": " + to_string(friendCount + 1) + " }";
         count++;
     }
     json += "], \"links\": [";
     count = 0;
-    set<string> processedEdges;
+    set<string> pe;
     for (auto const &[u, friends] : adjList)
+    {
         for (int v : friends)
         {
-            int minId = min(u, v);
-            int maxId = max(u, v);
-            string edgeKey = to_string(minId) + "-" + to_string(maxId);
-            if (processedEdges.find(edgeKey) == processedEdges.end())
+            int mi = min(u, v);
+            int ma = max(u, v);
+            string ek = to_string(mi) + "-" + to_string(ma);
+            if (pe.find(ek) == pe.end())
             {
                 if (count > 0)
                     json += ", ";
                 json += "{ \"source\": " + to_string(u) + ", \"target\": " + to_string(v) + " }";
-                processedEdges.insert(edgeKey);
+                pe.insert(ek);
                 count++;
             }
         }
-    json += "] }";
-    return json;
+    }
+    return json + "] }";
 }
 
 int NovaGraph::getRelationDegree(int startNode, int targetNode)
