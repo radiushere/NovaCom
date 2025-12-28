@@ -1,64 +1,62 @@
 import React from 'react';
 
 const Sidebar = ({ activeTab, setActiveTab, joinedCommunities = [], onCommunityClick, currentUserId, currentUser }) => {
+
+  const NavItem = ({ id, icon, label, onClick }) => {
+    const isActive = activeTab === id;
+    return (
+      <button
+        onClick={onClick || (() => setActiveTab(id))}
+        className={`w-full flex items-center px-6 py-4 transition-all duration-300 group ${isActive ? 'bg-museum-stone/30 text-museum-text' : 'text-museum-muted hover:text-museum-text hover:bg-museum-stone/10'}`}
+      >
+        <span className={`text-xl transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>{icon}</span>
+        <span className={`ml-4 font-sans text-sm font-medium tracking-wide hidden md:block ${isActive ? 'text-museum-text' : ''}`}>{label}</span>
+        {isActive && <div className="ml-auto w-1 h-1 bg-museum-text hidden md:block"></div>}
+      </button>
+    );
+  };
+
   return (
-    <div className="w-20 md:w-64 bg-void-black/90 border-r border-white/10 flex flex-col h-screen fixed left-0 top-0 z-50 backdrop-blur-xl">
-      
+    <div className="w-20 md:w-64 bg-museum-surface border-r border-museum-stone flex flex-col h-screen fixed left-0 top-0 z-50 transition-all duration-300">
+
       {/* Logo */}
-      <div className="h-20 flex items-center justify-center border-b border-white/10">
-        <h1 className="hidden md:block font-orbitron text-xl text-cyan-supernova drop-shadow-glow tracking-widest cursor-pointer" onClick={() => setActiveTab('home')}>NOVA</h1>
-        <span className="md:hidden font-orbitron text-2xl text-cyan-supernova">N</span>
+      <div className="h-24 flex items-center justify-center border-b border-museum-stone/50">
+        <h1 className="hidden md:block font-serif text-2xl text-museum-text tracking-widest cursor-pointer" onClick={() => setActiveTab('home')}>MUSE</h1>
+        <span className="md:hidden font-serif text-2xl text-museum-text">M</span>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-4 space-y-2">
-        <button onClick={() => setActiveTab('home')} className={`w-full flex items-center px-6 py-3 transition-all border-l-4 ${activeTab === 'home' ? 'border-cyan-supernova bg-cyan-supernova/10 text-white' : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}>
-          <span className="text-xl">🏠</span><span className="ml-4 font-montserrat font-bold hidden md:block">Dashboard</span>
-        </button>
+      <nav className="flex-1 overflow-y-auto py-6 space-y-1">
+        <NavItem id="home" icon="🏛️" label="Gallery" />
+        <NavItem id="inbox" icon="✉️" label="Correspondence" />
+        <NavItem id="explore_comms" icon="🔭" label="Discover" />
+        <NavItem id="explore_users" icon="👥" label="Patrons" />
+        <NavItem id="notifications" icon="🔔" label="Notices" />
+        <NavItem id="map" icon="🗺️" label="Cartography" />
 
-        {/* NEW MESSAGES TAB */}
-        <button onClick={() => setActiveTab('inbox')} className={`w-full flex items-center px-6 py-3 transition-all border-l-4 ${activeTab === 'inbox' ? 'border-yellow-400 bg-yellow-400/10 text-white' : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}>
-          <span className="text-xl">💬</span><span className="ml-4 font-montserrat font-bold hidden md:block">Messages</span>
-        </button>
-
-        <button onClick={() => setActiveTab('explore_comms')} className={`w-full flex items-center px-6 py-3 transition-all border-l-4 ${activeTab === 'explore_comms' ? 'border-cosmic-purple bg-cosmic-purple/10 text-white' : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}>
-          <span className="text-xl">🔭</span><span className="ml-4 font-montserrat font-bold hidden md:block">Find Nebulas</span>
-        </button>
-        <button onClick={() => setActiveTab('explore_users')} className={`w-full flex items-center px-6 py-3 transition-all border-l-4 ${activeTab === 'explore_users' ? 'border-green-400 bg-green-400/10 text-white' : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}>
-          <span className="text-xl">📡</span><span className="ml-4 font-montserrat font-bold hidden md:block">Find Signals</span>
-        </button>
-		<button 
-          onClick={() => setActiveTab('notifications')}
-          className={`w-full flex items-center px-6 py-3 transition-all border-l-4 ${activeTab === 'notifications' ? 'border-yellow-400 bg-yellow-400/10 text-white' : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}
-        >
-          <span className="text-xl">🔔</span>
-          <span className="ml-4 font-montserrat font-bold hidden md:block">Requests</span>
-        </button>
-        <button onClick={() => setActiveTab('map')} className={`w-full flex items-center px-6 py-3 transition-all border-l-4 ${activeTab === 'map' ? 'border-pink-500 bg-pink-500/10 text-white' : 'border-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}>
-          <span className="text-xl">🌌</span><span className="ml-4 font-montserrat font-bold hidden md:block">Galaxy Map</span>
-        </button>
-
-        <div className="mt-6 px-6 mb-2 border-t border-white/10 pt-4">
-          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider hidden md:block">Joined Nebulas</p>
+        <div className="mt-8 px-6 mb-4">
+          <p className="text-xs text-museum-muted font-serif italic tracking-wider hidden md:block">Collections</p>
         </div>
 
         {joinedCommunities.map(c => (
-          <button key={c.id} onClick={() => onCommunityClick(c.id)} className={`w-full flex items-center px-6 py-2 transition-all border-l-4 ${activeTab === `comm_${c.id}` ? 'border-cyan-supernova bg-cyan-supernova/5 text-white' : 'border-transparent text-gray-400 hover:text-white'}`}>
-            <div className="w-8 h-8 rounded-full bg-deep-void flex items-center justify-center text-xs font-bold border border-white/20 flex-shrink-0">{c.name.substring(0,2).toUpperCase()}</div>
-            <span className="ml-4 font-montserrat text-sm hidden md:block truncate">{c.name}</span>
+          <button key={c.id} onClick={() => onCommunityClick(c.id)} className={`w-full flex items-center px-6 py-3 transition-all group ${activeTab === `comm_${c.id}` ? 'text-museum-text' : 'text-museum-muted hover:text-museum-text'}`}>
+            <div className="w-6 h-6 bg-museum-stone flex items-center justify-center text-[10px] font-serif border border-transparent group-hover:border-museum-muted transition-colors">
+              {c.name.substring(0, 2).toUpperCase()}
+            </div>
+            <span className="ml-4 font-sans text-sm hidden md:block truncate">{c.name}</span>
           </button>
         ))}
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-white/10">
-        <button onClick={() => setActiveTab(`profile_${currentUserId}`)} className="flex items-center gap-3 w-full hover:bg-white/5 p-2 rounded transition text-left">
-          <div className="w-10 h-10 rounded-full bg-cyan-supernova/20 border border-cyan-supernova overflow-hidden flex items-center justify-center text-cyan-supernova font-bold flex-shrink-0">
-             {currentUser?.avatar ? <img src={currentUser.avatar} className="w-full h-full object-cover" alt="me"/> : (currentUser?.name?.[0] || currentUserId)}
+      <div className="p-6 border-t border-museum-stone/50">
+        <button onClick={() => setActiveTab(`profile_${currentUserId}`)} className="flex items-center gap-3 w-full hover:bg-museum-stone/20 p-2 transition-colors text-left">
+          <div className="w-10 h-10 bg-museum-stone overflow-hidden flex items-center justify-center text-museum-muted font-serif">
+            {currentUser?.avatar ? <img src={currentUser.avatar} className="w-full h-full object-cover" alt="me" /> : (currentUser?.name?.[0] || "U")}
           </div>
           <div className="hidden md:block overflow-hidden">
-            <p className="text-sm font-bold text-white truncate">{currentUser?.name || "User " + currentUserId}</p>
-            <p className="text-xs text-green-400">Online</p>
+            <p className="text-sm font-medium text-museum-text truncate">{currentUser?.name || "User"}</p>
+            <p className="text-xs text-museum-muted">View Profile</p>
           </div>
         </button>
       </div>

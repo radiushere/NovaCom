@@ -24,32 +24,32 @@ const RecommendationList = ({ userId }) => {
   };
 
   return (
-    <GlassCard className="h-full">
-      <h2 className="font-orbitron text-xl text-cyan-supernova drop-shadow-glow mb-4">
-        Nova AI Suggestions
+    <GlassCard className="h-full border border-museum-stone shadow-sm">
+      <h2 className="font-serif text-xl text-museum-text mb-6 border-b border-museum-stone pb-2">
+        Curated For You
       </h2>
-      
+
       {recs.length === 0 ? (
-        <p className="text-gray-400 text-sm">No new signals detected.</p>
+        <p className="text-museum-muted text-sm font-serif italic">No suggestions available.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {recs.map((user) => (
-            <div key={user.id} className="flex justify-between items-center bg-void-black/50 p-3 rounded-lg border border-white/5 hover:border-cyan-supernova/50 transition-all">
+            <div key={user.id} className="flex justify-between items-center bg-white p-4 border border-museum-stone hover:border-museum-text transition-all group">
               <div>
-                <h3 className="font-montserrat font-bold text-white">{user.name}</h3>
-                <p className="text-xs text-cosmic-purple">
-                  {user.mutual_friends} Mutual Connections
+                <h3 className="font-serif font-bold text-museum-text text-lg">{user.name}</h3>
+                <p className="text-xs text-museum-muted uppercase tracking-widest">
+                  {user.mutual_friends} Mutual
                 </p>
               </div>
-              
+
               {/* --- UPDATED BUTTON --- */}
-              <button 
+              <button
                 onClick={() => handleConnect(user.id)}
-                className="bg-cyan-supernova/10 text-cyan-supernova text-xs px-3 py-1 rounded hover:bg-cyan-supernova hover:text-black transition"
+                className="bg-white border border-museum-stone text-museum-text text-xs px-4 py-2 hover:bg-museum-text hover:text-white transition uppercase tracking-widest"
               >
                 Connect
               </button>
-              
+
             </div>
           ))}
         </div>

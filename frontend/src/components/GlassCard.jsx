@@ -3,13 +3,14 @@ import React from 'react';
 const GlassCard = ({ children, className = "" }) => {
   return (
     <div className={`
-      bg-nebula-blue/30 
-      backdrop-blur-md 
-      border border-white/10 
-      rounded-2xl 
-      p-6 
-      shadow-lg 
-      text-white 
+      bg-museum-surface
+      border border-museum-stone
+      rounded-none
+      p-8
+      shadow-sm
+      text-museum-text
+      transition-all duration-300
+      hover:shadow-md
       ${className}
     `}>
       {children}

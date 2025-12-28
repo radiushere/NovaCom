@@ -14,15 +14,15 @@ const NetworkMap = () => {
   const imgCache = useRef({});
 
   const fetchGraph = () => {
-    setError("Scanning sector...");
+    setError("Curating connections...");
     callBackend('get_visual_graph').then(data => {
       if (data && data.nodes && data.nodes.length > 0) {
         setGraphData(data);
         setError(null);
       } else {
-        setError("Neural network empty. Connect signals to generate map.");
+        setError("Collection empty. Connect with others to visualize.");
       }
-    }).catch(err => setError("Neural link failed."));
+    }).catch(err => setError("Connection failed."));
   };
 
   useEffect(() => {
@@ -40,22 +40,16 @@ const NetworkMap = () => {
   const paintNode = useCallback((node, ctx, globalScale) => {
     const size = Math.sqrt(node.val) * 5; // Node radius based on friend count
 
-    // 1. Draw Glow Effect
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, size * 1.4, 0, 2 * Math.PI, false);
-    ctx.fillStyle = 'rgba(0, 240, 255, 0.15)';
-    ctx.fill();
-
-    // 2. Draw Outer Ring
+    // 1. Draw Outer Ring (Clean, Museum Style)
     ctx.beginPath();
     ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-    ctx.strokeStyle = '#00F0FF';
+    ctx.strokeStyle = '#1C1917'; // Museum Text (Soft Black)
     ctx.lineWidth = 1 / globalScale;
     ctx.stroke();
-    ctx.fillStyle = '#0B0B15';
+    ctx.fillStyle = '#FFFFFF';
     ctx.fill();
 
-    // 3. Draw Avatar Image
+    // 2. Draw Avatar Image
     const imgUrl = node.avatar && node.avatar !== "NULL" && node.avatar !== "none" ? node.avatar : null;
 
     if (imgUrl) {
@@ -76,86 +70,59 @@ const NetworkMap = () => {
       }
     } else {
       // Placeholder if no avatar (First letter)
-      ctx.fillStyle = '#00F0FF';
-      ctx.font = `${size}px Orbitron`;
+      ctx.fillStyle = '#1C1917';
+      ctx.font = `${size}px "Playfair Display", serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(node.name[0].toUpperCase(), node.x, node.y);
     }
 
-    // 4. Draw Label (User Name)
+    // 3. Draw Label (User Name)
     const label = node.name;
     const fontSize = 12 / globalScale;
-    ctx.font = `${fontSize}px Montserrat`;
+    ctx.font = `${fontSize}px "Inter", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.fillText(label, node.x, node.y + size + 2);
+    ctx.fillStyle = '#44403C'; // Stone 700
+    ctx.fillText(label, node.x, node.y + size + 4);
   }, []);
 
   return (
-    <GlassCard className="h-full w-full relative overflow-hidden flex flex-col p-0 border-cyan-supernova/20">
-      <div className="absolute top-4 left-4 z-20 pointer-events-none p-4">
-        <h2 className="font-orbitron text-2xl text-cyan-supernova drop-shadow-glow">GALAXY MAP</h2>
-        <p className="text-gray-400 text-xs tracking-widest uppercase">Visualizing Neural Connections</p>
+    <GlassCard className="h-full w-full relative overflow-hidden flex flex-col p-0 border-museum-stone">
+      <div className="absolute top-6 left-6 z-20 pointer-events-none">
+        <h2 className="font-serif text-3xl text-museum-text">Cartography</h2>
+        <p className="text-museum-muted text-sm italic">Visualizing the network of patrons</p>
       </div>
 
-      <div className="absolute top-4 right-4 z-20">
-        <button onClick={fetchGraph} className="bg-void-black/80 hover:bg-cyan-supernova/20 text-cyan-supernova text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-cyan-supernova/40 backdrop-blur-md transition-all active:scale-95">
-          Sync Network
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-white/80 backdrop-blur-sm">
+          <p className="text-museum-muted font-serif text-xl">{error}</p>
+        </div>
+      )}
+
+      <div ref={containerRef} className="flex-1 w-full h-full bg-museum-bg">
+        <ForceGraph2D
+          ref={fgRef}
+          width={dimensions.w}
+          height={dimensions.h}
+          graphData={graphData}
+          nodeLabel="name"
+          nodeCanvasObject={paintNode}
+          linkColor={() => '#E7E5E4'} // Museum Stone
+          backgroundColor="#FAFAF9" // Museum BG
+          d3VelocityDecay={0.1}
+          cooldownTicks={100}
+          onEngineStop={() => fgRef.current.zoomToFit(400)}
+        />
+      </div>
+
+      <div className="absolute bottom-6 right-6 z-20 flex gap-2">
+        <button onClick={() => fetchGraph()} className="bg-white border border-museum-stone p-3 rounded-full shadow-sm hover:shadow-md text-museum-text transition-all" title="Refresh">
+          🔄
         </button>
-      </div>
-
-      <div ref={containerRef} className="flex-1 bg-void-black w-full h-full relative">
-        {graphData.nodes.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500 flex-col gap-4">
-            <div className="w-12 h-12 border-2 border-cyan-supernova border-t-transparent rounded-full animate-spin"></div>
-            <p className="font-orbitron tracking-widest text-sm">{error || "LOADING SECTOR..."}</p>
-          </div>
-        ) : (
-          <ForceGraph2D
-            ref={fgRef}
-            width={dimensions.w}
-            height={dimensions.h}
-            graphData={graphData}
-            backgroundColor="#0B0B15"
-
-            // Custom Node Rendering
-            nodeCanvasObject={paintNode}
-            nodePointerAreaPaint={(node, color, ctx) => {
-              const size = Math.sqrt(node.val) * 5;
-              ctx.fillStyle = color;
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-              ctx.fill();
-            }}
-
-            // Tooltip on hover
-            nodeLabel={node => `
-                  <div style="background: rgba(11, 11, 21, 0.9); border: 1px solid #00F0FF; padding: 8px; border-radius: 8px; color: white; font-family: Montserrat;">
-                    <b style="color: #00F0FF;">${node.name}</b><br/>
-                    <small style="opacity: 0.7;">Neural ID: ${node.id}</small>
-                  </div>
-                `}
-
-            // Links
-            linkColor={() => "rgba(108, 99, 255, 0.3)"}
-            linkWidth={1.5}
-            linkDirectionalParticles={4}
-            linkDirectionalParticleSpeed={0.003}
-            linkDirectionalParticleWidth={2}
-
-            // Physics
-            d3VelocityDecay={0.1}
-            d3AlphaDecay={0.01}
-            cooldownTicks={100}
-
-            onNodeClick={node => {
-              fgRef.current.centerAt(node.x, node.y, 1000);
-              fgRef.current.zoom(5, 2000);
-            }}
-          />
-        )}
+        <button onClick={() => fgRef.current.zoomToFit(400)} className="bg-white border border-museum-stone p-3 rounded-full shadow-sm hover:shadow-md text-museum-text transition-all" title="Center">
+          🎯
+        </button>
       </div>
     </GlassCard>
   );

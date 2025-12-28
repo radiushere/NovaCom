@@ -7,22 +7,30 @@ export default {
   theme: {
     extend: {
       colors: {
-        'void-black': '#0B0B15',       // Deepest background
-        'nebula-blue': '#1A1A2E',      // Lighter background
-        'cyan-supernova': '#00F0FF',   // Glowing text/logos
-        'cosmic-purple': '#6C63FF',    // Primary buttons
-        'deep-void': '#151525',        // Input fields
-        'glass-white': 'rgba(255, 255, 255, 0.1)', // Glass effect
+        'museum-bg': '#FAFAF9',       // Warm off-white background
+        'museum-surface': '#FFFFFF',  // Pure white cards
+        'museum-text': '#1C1917',     // Soft black text
+        'museum-muted': '#78716C',    // Muted gray text
+        'museum-gold': '#C5A059',     // Elegant accent
+        'museum-stone': '#E7E5E4',    // Borders
       },
       fontFamily: {
-        'orbitron': ['Orbitron', 'sans-serif'],   // For Headings
-        'montserrat': ['Montserrat', 'sans-serif'], // For Body text
+        'serif': ['"Playfair Display"', 'serif'],   // Headings
+        'sans': ['"Inter"', 'sans-serif'],          // Body
       },
-      backgroundImage: {
-        'space-gradient': 'linear-gradient(to bottom right, #0B0B15, #1A1A2E)',
+      animation: {
+        'fade-in': 'fadeIn 0.8s ease-out forwards',
+        'slide-up': 'slideUp 0.8s ease-out forwards',
       },
-      dropShadow: {
-        'glow': '0 0 10px rgba(0, 240, 255, 0.5)', // Neon glow effect
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        }
       }
     },
   },

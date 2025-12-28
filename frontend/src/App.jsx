@@ -73,8 +73,8 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-void-black bg-[url('/bg.jpg')] bg-cover bg-center text-white font-montserrat">
-      <div className="fixed inset-0 bg-void-black/85 pointer-events-none z-0"></div>
+    <div className="flex min-h-screen bg-museum-bg text-museum-text font-sans">
+      {/* Clean background, no overlay needed */}
 
       <GlobalNavigator onBack={undo} onForward={redo} loading={loading} />
 

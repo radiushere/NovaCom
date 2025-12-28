@@ -1,30 +1,29 @@
 import React from 'react';
 
-const STATIC_TAGS = ["Gaming", "Anime", "Movies", "Student", "Adult", "Teen"];
+const STATIC_TAGS = ["Photography", "Art", "History", "Design", "Architecture", "Music", "Literature", "Cinema"];
 
-const TagSelector = ({ selectedTags, setSelectedTags }) => {
+const TagSelector = ({ selectedTags, onChange }) => {
   const toggleTag = (tag) => {
     if (selectedTags.includes(tag)) {
       if (selectedTags.length > 1) { // Require at least one
-        setSelectedTags(selectedTags.filter(t => t !== tag));
+        onChange(selectedTags.filter(t => t !== tag));
       }
     } else {
-      setSelectedTags([...selectedTags, tag]);
+      onChange([...selectedTags, tag]);
     }
   };
 
   return (
-    <div className="flex flex-wrap gap-2 mt-2">
+    <div className="flex flex-wrap gap-3 mt-2">
       {STATIC_TAGS.map(tag => (
         <button
           key={tag}
           type="button"
           onClick={() => toggleTag(tag)}
-          className={`px-3 py-1 rounded-full text-xs font-bold border transition ${
-            selectedTags.includes(tag) 
-              ? 'bg-cyan-supernova text-black border-cyan-supernova' 
-              : 'bg-transparent text-gray-400 border-gray-600 hover:border-white'
-          }`}
+          className={`px-4 py-2 rounded-none text-xs uppercase tracking-widest border transition ${selectedTags.includes(tag)
+              ? 'bg-museum-text text-white border-museum-text'
+              : 'bg-white text-museum-muted border-museum-stone hover:border-museum-text hover:text-museum-text'
+            }`}
         >
           {tag}
         </button>
